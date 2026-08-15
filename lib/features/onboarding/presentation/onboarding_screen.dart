@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/config/app_theme.dart';
+import '../../../core/config/app_router.dart' show onboardingSeenCache;
 import '../../../core/services/app_settings_service.dart';
 import '../../auth/data/avatar_service.dart';
 import '../../profile/data/profile_providers.dart';
@@ -259,7 +260,7 @@ class _ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final avatars =
-        AvatarService.instance.catalog.where((a) => a.gender == gender);
+        AvatarService.catalog.where((a) => a.gender == gender);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),

@@ -37,8 +37,10 @@ class VerseWorker {
     try {
       final repo = BibleRepository(AppDatabaseService.instance.database);
       final verses = await repo.getPassage(reference, language: 'en');
-      final text =
-          verses.map((v) => v.text ?? '').where((t) => t.isNotEmpty).join(' ');
+      final text = verses
+          .map((v) => v.content ?? '')
+          .where((t) => t.isNotEmpty)
+          .join(' ');
       return {
         'reference': reference,
         'text_en': text,

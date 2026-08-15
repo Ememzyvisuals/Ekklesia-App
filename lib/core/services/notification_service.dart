@@ -153,6 +153,8 @@ class NotificationService {
       ),
       matchDateTimeComponents: DateTimeComponents.time, // repeats daily
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       payload: reminderType,
     );
   }

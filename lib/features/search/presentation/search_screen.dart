@@ -154,7 +154,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         results.add(_SearchResult(
           type: _SearchSourceType.bible,
           title: '${v.bookCode} ${v.chapter}:${v.number}',
-          subtitle: v.text ?? '',
+          subtitle: v.content ?? '',
           payload: v,
         ));
       }

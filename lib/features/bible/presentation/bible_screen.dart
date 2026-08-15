@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart' show PlayerState;
 
 import '../../../core/config/app_theme.dart';
 import '../../../core/services/tts_service.dart';
+import '../../../core/services/local_tts_engine.dart' show TtsModelNotReadyException;
 import '../../../core/services/audio_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../bookmarks/presentation/bookmark_button.dart';

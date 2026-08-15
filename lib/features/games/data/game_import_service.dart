@@ -44,7 +44,8 @@ class GameImportService {
         // User cancelled the picker — not an error.
         return const Result.failure(AppFailure(message: '', retryable: false));
       }
-      return importFromZipPath(path);
+      final result = await importFromZipPath(path);
+      return result;
     } catch (e) {
       return Result.failure(AppFailure(
         message: 'Could not open that file picker.',

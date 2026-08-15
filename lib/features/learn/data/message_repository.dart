@@ -40,7 +40,7 @@ class ArchivedMessage {
   final String? summary;
   final List<Map<String, dynamic>>? quiz;
 
-  factory ArchivedMessage.fromRow(MessageData row) {
+  factory ArchivedMessage.fromRow(Message row) {
     return ArchivedMessage(
       id: row.id,
       title: row.title,

@@ -28,10 +28,6 @@ class PrayerWorker {
   static const _cacheKey = 'cached_daily_prayer';
   static const _cacheDateKey = 'cached_daily_prayer_date';
 
-  static const _offlineFallback =
-      'Lord, thank You for this day. Guide my steps, renew my strength, '
-      'and help me walk in Your word. Amen.';
-
   Future<Map<String, dynamic>> getTodaysPrayer(
       {required String language}) async {
     final today = _todayKey();
