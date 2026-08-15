@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="robef1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1F5E3B"/>
+      <stop offset="1" stop-color="#164429"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="100" fill="#F5F4EF"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#C8A24D" stroke-width="2" opacity="0.5"/>
+  <!-- shoulders / robe -->
+  <path d="M40 190 Q100 142 160 190 L160 200 L40 200 Z" fill="url(#robef1)"/>
+  <!-- neck -->
+  <rect x="88" y="128" width="24" height="28" rx="10" fill="#D9A87C"/>
+  <!-- face -->
+  <ellipse cx="100" cy="100" rx="36" ry="40" fill="#E0AD80"/>
+  <!-- headscarf -->
+  <path d="M56 100 Q50 46 100 40 Q150 46 144 100 Q150 150 122 176 Q136 130 128 90 Q114 66 100 66 Q86 66 72 90 Q64 130 78 176 Q50 150 56 100 Z" fill="#EDE6D6"/>
+  <path d="M62 96 Q58 54 100 48 Q142 54 138 96 Q134 72 100 68 Q66 72 62 96 Z" fill="#F5F4EF"/>
+  <!-- eyes -->
+  <circle cx="87" cy="98" r="3" fill="#2B2320"/>
+  <circle cx="113" cy="98" r="3" fill="#2B2320"/>
+  <!-- brows -->
+  <path d="M80 89 Q87 85 94 89" stroke="#3A2E28" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M106 89 Q113 85 120 89" stroke="#3A2E28" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <!-- lips -->
+  <path d="M92 116 Q100 120 108 116" stroke="#A65D4A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- gold trim accent -->
+  <circle cx="100" cy="180" r="5" fill="#C8A24D"/>
+</svg>

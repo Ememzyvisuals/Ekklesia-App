@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="robe2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E9E2D0"/>
+      <stop offset="1" stop-color="#C9BE9C"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="100" fill="#F5F4EF"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#C8A24D" stroke-width="2" opacity="0.5"/>
+  <!-- shoulders / robe -->
+  <path d="M38 190 Q100 142 162 190 L162 200 L38 200 Z" fill="url(#robe2)"/>
+  <path d="M60 176 Q100 196 140 176 L140 200 L60 200 Z" fill="#8B6F35" opacity="0.35"/>
+  <!-- neck -->
+  <rect x="88" y="126" width="24" height="30" rx="10" fill="#C79A72"/>
+  <!-- face -->
+  <ellipse cx="100" cy="100" rx="36" ry="40" fill="#D3A377"/>
+  <!-- beard -->
+  <path d="M64 96 Q60 140 100 150 Q140 140 136 96 Q134 130 100 136 Q66 130 64 96 Z" fill="#DCDCDC"/>
+  <path d="M70 92 Q66 118 100 126 Q134 118 130 92" fill="none" stroke="#B9B9B9" stroke-width="1.5" opacity="0.5"/>
+  <!-- mustache -->
+  <path d="M84 104 Q100 112 116 104 Q100 110 84 104 Z" fill="#DCDCDC"/>
+  <!-- turban -->
+  <path d="M58 84 Q64 44 100 42 Q136 44 142 84 Q136 66 100 64 Q64 66 58 84 Z" fill="#2E2A3D"/>
+  <ellipse cx="100" cy="50" rx="40" ry="16" fill="#3B3652"/>
+  <!-- eyes -->
+  <circle cx="86" cy="96" r="3" fill="#2B2320"/>
+  <circle cx="114" cy="96" r="3" fill="#2B2320"/>
+  <!-- brows -->
+  <path d="M78 88 Q86 84 94 88" stroke="#B9B9B9" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M106 88 Q114 84 122 88" stroke="#B9B9B9" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

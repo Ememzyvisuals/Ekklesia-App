@@ -1,0 +1,74 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sweep, independent of pushes — catches newly-disclosed CVEs
+    # in dependencies that haven't changed, not just new code.
+    - cron: "0 3 * * 1"
+
+jobs:
+  flutter-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # `flutter pub outdated --mode=null-safety` doesn't do CVE scanning
+      # (pub.dev/Dart has no first-party advisory database equivalent to
+      # `npm audit` at time of writing) — this step is honest about that
+      # rather than pretending to. `dependency_check.yml` covers the
+      # lockfile-sync side; this is the closest real equivalent available.
+      - name: Report dependency versions for manual review
+        run: flutter pub outdated --json > flutter-dependency-versions.json || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-dependency-versions
+          path: flutter-dependency-versions.json
+
+  # functions-audit job removed — functions/ was deleted outright (see
+  # dependency_check.yml's identical removal note).
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Real regression guard for the specific keys this project actually
+      # uses (Groq, YouTube Data API) — not a generic "detect all secrets"
+      # scanner. flutter_dotenv/.env were removed entirely
+      # (PROJECT_MIGRATION_AUDIT.md — nothing read a value out of .env
+      # anymore once gradio_client.dart was deleted), so this check now
+      # guards against .env ever being reintroduced and accidentally
+      # committed, not against an expected-to-exist file.
+      - name: Fail if a .env file is committed
+        run: |
+          if git ls-files | grep -qE "(^|/)\.env$"; then
+            echo "::error::A .env file is tracked in git — this project doesn't use one anymore (see PROJECT_MIGRATION_AUDIT.md). Remove it."
+            exit 1
+          fi
+
+      # Real regression guard for the specific keys this project actually
+      # deals with (Groq, YouTube Data API) — not a generic "detect all
+      # secrets" scanner. More relevant than it used to be, not less:
+      # every user types their own real Groq key into the app now (no
+      # shared key to protect), so a leaked gsk_ pattern here would be an
+      # actual user's credential, not just a project secret. .ts pattern
+      # dropped — functions/ (the only TypeScript source) was deleted.
+      - name: Scan for inline secrets in tracked source
+        run: |
+          if grep -rnE "(gsk_|AIza)[A-Za-z0-9_-]{20,}" \
+              --include="*.dart" --include="*.json" .; then
+            echo "::error::Found what looks like a live Groq (gsk_...) or Google (AIza...) key committed in source above."
+            exit 1
+          fi

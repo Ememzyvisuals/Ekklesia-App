@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    # Secrets can't be referenced directly in an `if:` conditional (job or
+    # step level) — GitHub's parser rejects the whole workflow file with
+    # "Unrecognized named-value: 'secrets'" if you try, which is a
+    # parse-time failure, not a runtime one (the job never even starts).
+    # Documented: https://docs.github.com/actions/security-guides/using-secrets-in-github-actions
+    # Fix is exactly what those docs recommend — promote the check to a
+    # job-level env var (secrets ARE allowed in job-level env:), then
+    # reference the env var in each step's `if:` instead.
+    env:
+      HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      - name: Generate Drift + Isar code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Generate localization code
+        run: flutter gen-l10n
+
+      # This is what actually closes the "no android/ directory" gap —
+      # `flutter create .` only fills in missing platform folders, it
+      # does not touch lib/ or any existing config, so it's safe to run
+      # against an existing project. This is fundamentally different from
+      # hand-writing android/ios by hand (which this project's docs
+      # explicitly decided against — see FINAL_AUDIT_REPORT.md): this
+      # step runs on a real GitHub Actions runner with a real Flutter SDK
+      # (installed by subosito/flutter-action above), so the generated
+      # project is guaranteed correct for whatever Flutter version the
+      # runner has — not a hand-guessed, untestable copy.
+      - name: Generate platform folders
+        run: flutter create . --platforms=android,ios --org com.ememzyvisuals --project-name ekklesia
+
+      # Wires up real release signing from repository secrets, instead of
+      # silently falling back to the debug keystore `flutter create`
+      # ships by default (which builds fine but isn't installable-as-an-
+      # update over a Play Store release, and Play Console will reject an
+      # AAB signed with the debug key anyway). Skips cleanly if the
+      # secrets aren't configured yet — the build still succeeds
+      # debug-signed, it just isn't store-submittable until secrets exist.
+      - name: Configure Android release signing
+        if: env.HAS_ANDROID_KEYSTORE == 'true'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=release-keystore.jks
+          EOF
+          # `flutter create`'s generated build.gradle only has a debug
+          # signingConfig wired to the release buildType — patch in a
+          # real release signingConfig that reads the key.properties
+          # above, following the standard Flutter release-signing setup.
+          python3 - <<'PYEOF'
+          import re, os
+          path = "android/app/build.gradle"
+          if not os.path.exists(path) and os.path.exists(path + ".kts"):
+              path = path + ".kts"
+          src = open(path).read()
+          if "keystoreProperties" not in src:
+              inject = '''
+          def keystorePropertiesFile = rootProject.file("key.properties")
+          def keystoreProperties = new Properties()
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+          }
+          '''
+              src = src.replace("android {", inject + "\nandroid {", 1)
+              release_signing = '''
+              signingConfigs {
+                  release {
+                      if (keystorePropertiesFile.exists()) {
+                          keyAlias keystoreProperties['keyAlias']
+                          keyPassword keystoreProperties['keyPassword']
+                          storeFile file(keystoreProperties['storeFile'])
+                          storePassword keystoreProperties['storePassword']
+                      }
+                  }
+              }
+          '''
+              src = re.sub(r"buildTypes \{", release_signing + "\n    buildTypes {", src, count=1)
+              src = src.replace(
+                  "signingConfig signingConfigs.debug",
+                  "signingConfig signingConfigs.release",
+              )
+              open(path, "w").write(src)
+              print(f"Patched {path} with release signing config.")
+          else:
+              print(f"{path} already references keystoreProperties — skipping patch.")
+          PYEOF
+
+      # PROJECT_MIGRATION_AUDIT.md Phase 3: youtubeApiKey is passed at
+      # build time via --dart-define, not read from any file (see
+      # AppConfig.youtubeApiKey's doc comment). Without this secret set,
+      # the build steps below still succeed — --dart-define with an empty
+      # value just means AppConfig falls back to its own placeholder
+      # string — but the resulting release build's YouTube/sermon library
+      # feature will silently 401/403 against the real API on a real
+      # device. Warn loudly here instead of letting that ship unnoticed.
+      - name: Check YOUTUBE_API_KEY secret is set
+        if: env.HAS_YOUTUBE_API_KEY != 'true'
+        run: echo "::warning::YOUTUBE_API_KEY secret is not set — this release build's YouTube/sermon library feature will not work on a real device. Set the secret before tagging a real release."
+
+      - name: Build release APK
+        run: flutter build apk --release --dart-define=YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
+
+      - name: Build App Bundle (for Play Store)
+        run: flutter build appbundle --release --dart-define=YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+
+  create-release:
+    needs: build-android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/flutter-apk/app-release.apk
+            dist/bundle/release/app-release.aab
+          generate_release_notes: true
+          draft: true

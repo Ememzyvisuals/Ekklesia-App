@@ -1,0 +1,24 @@
+# This file didn't exist before this pass — `flutter_lints` was already a
+# pubspec.yaml dependency but was never actually wired up via `include:`
+# below, so `dart analyze` had been running with zero configuration the
+# entire time (no base ruleset, no excludes). That's the reason every
+# generated-file warning (`experimental_member_use` on Isar's `*.g.dart`
+# output) was being analyzed at all — generated code should never be
+# held to the same lint bar as hand-written source, and analyzing it was
+# always a config gap, not a deliberate choice.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # Isar's generated schema/collection code (lib/features/bible/data/
+    # *_schema.g.dart) — machine-written, regenerated on every
+    # `build_runner build`, never hand-edited. This is what was producing
+    # the ~24 `experimental_member_use` warnings (getByIndex, putByIndex,
+    # etc.) that made up the bulk of every remaining `dart analyze`
+    # failure — Isar's own generator uses its own experimental APIs
+    # internally, which is Isar's business, not this app's.
+    - "**/*.g.dart"
+    # flutter_localizations' generated output (lib/l10n/generated/) —
+    # same reasoning, machine-written by `flutter gen-l10n`, never
+    # hand-edited.
+    - "lib/l10n/generated/**"

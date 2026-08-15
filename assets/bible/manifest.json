@@ -1,0 +1,27 @@
+{
+  "en": {
+    "file": "assets/bible/en.json",
+    "sha256": "f010591756a0d4e787f50a313ae26c90647575c33f1ae00e5b01e23f76e525a7",
+    "bytes": 5031053
+  },
+  "yo": {
+    "file": "assets/bible/yo.json",
+    "sha256": "94345ffc3456d8467db3dc3e9f77fe07dfd52a048d9f7e373842fb4e78b544e2",
+    "bytes": 6935131
+  },
+  "ha": {
+    "file": "assets/bible/ha.json",
+    "sha256": "d7884a8b5de463f710c0bfeae57d3f45f2d55919f80771d81642632be34f4ae9",
+    "bytes": 5545312
+  },
+  "ig": {
+    "file": "assets/bible/ig.json",
+    "sha256": "ceac3ded76ef11bd9dd79c459058ee21511a2285dc3ab03892c7d414a7471e6c",
+    "bytes": 6654197
+  },
+  "pcm": {
+    "file": "assets/bible/pcm.json",
+    "sha256": "02bbed2c62a60a7f7ef7902a2afd615cd9dd7596188720c10fa15bb952cd3cbd",
+    "bytes": 5231720
+  }
+}

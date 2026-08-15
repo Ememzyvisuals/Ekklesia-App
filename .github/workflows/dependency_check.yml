@@ -1,0 +1,55 @@
+name: Dependency Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Verify pubspec.lock is in sync with pubspec.yaml
+        run: |
+          # `git diff` reports nothing for a path git isn't already tracking,
+          # so this check silently passed on every run when pubspec.lock had
+          # never been committed — it never actually compared anything.
+          # Fail loudly on that state instead of pretending to check it.
+          if ! git ls-files --error-unmatch pubspec.lock > /dev/null 2>&1; then
+            echo "::error::pubspec.lock is not committed — run 'flutter pub get' locally and commit the generated pubspec.lock so this check can verify it stays in sync."
+            exit 1
+          fi
+          flutter pub get
+          if ! git diff --exit-code pubspec.lock; then
+            echo "::error::pubspec.lock is out of sync with pubspec.yaml — commit the regenerated lockfile."
+            exit 1
+          fi
+
+      - name: Check for dependency conflicts
+        run: flutter pub deps --style=compact > pubspec-deps-report.txt
+
+      - name: Check for outdated packages
+        run: flutter pub outdated --json > pubspec-outdated-report.json || true
+
+      - name: Upload dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report
+          path: |
+            pubspec-deps-report.txt
+            pubspec-outdated-report.json
+
+  # functions-dependencies job removed — functions/ (legacy Cloud
+  # Functions, kept as a rollback path for the Cloudflare-Worker
+  # architecture) was deleted outright. That architecture no longer
+  # exists either (PROJECT_MIGRATION_AUDIT.md — no cloud infrastructure
+  # of any kind runs for this app), so the rollback path it was for
+  # doesn't apply anymore.

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="robe3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5B5044"/>
+      <stop offset="1" stop-color="#443C33"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="100" fill="#F5F4EF"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#C8A24D" stroke-width="2" opacity="0.5"/>
+  <!-- shoulders / robe -->
+  <path d="M38 190 Q100 144 162 190 L162 200 L38 200 Z" fill="url(#robe3)"/>
+  <!-- scarf -->
+  <path d="M60 168 Q100 190 140 168 L134 186 Q100 202 66 186 Z" fill="#7C8A6E"/>
+  <!-- cross strap -->
+  <path d="M66 172 L128 148" stroke="#3A3128" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="112" cy="156" r="8" fill="#C8A24D"/>
+  <circle cx="112" cy="156" r="4" fill="#1F5E3B"/>
+  <!-- neck -->
+  <rect x="88" y="130" width="24" height="28" rx="10" fill="#C89468"/>
+  <!-- face -->
+  <ellipse cx="100" cy="102" rx="36" ry="40" fill="#CE9A6C"/>
+  <!-- hair -->
+  <path d="M64 94 Q60 56 100 52 Q140 56 136 94 Q134 74 100 70 Q66 74 64 94 Z" fill="#2B2320"/>
+  <!-- beard -->
+  <path d="M68 102 Q66 132 100 140 Q134 132 132 102 Q130 124 100 128 Q70 124 68 102 Z" fill="#382D26"/>
+  <!-- eyes -->
+  <circle cx="86" cy="100" r="3" fill="#2B2320"/>
+  <circle cx="114" cy="100" r="3" fill="#2B2320"/>
+  <!-- brows (serious expression) -->
+  <path d="M78 90 L94 92" stroke="#2B2320" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M106 92 L122 90" stroke="#2B2320" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

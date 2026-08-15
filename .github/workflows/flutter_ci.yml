@@ -1,0 +1,113 @@
+name: Flutter CI
+
+# PROJECT_MIGRATION_AUDIT.md: consolidated from three separate workflows
+# (flutter_ci.yml, flutter_analyze.yml, flutter_test.yml) that ran on the
+# exact same push/PR trigger and each independently repeated `flutter pub
+# get` + code generation + `flutter gen-l10n` — real, measurable CI-minute
+# waste, and three places to keep the same "why this step exists" comments
+# in sync (which had already drifted — flutter_analyze.yml's required-
+# workers check still listed SyncWorker after it was deleted as dead code
+# in Phase 4). This single workflow does everything the three used to,
+# nothing dropped, in the order that makes generation/format/analyze fail
+# fast before the slower test run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: ${{ runner.os }}-pub-
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # Required before analyze/test can even parse the codebase: Drift's
+      # AppDatabase (core/database/app_database.dart) has a
+      # `part 'app_database.g.dart';` directive, the one remaining Isar
+      # collection (BibleAudioCacheEntity — see isar_service.dart's doc
+      # comment for why it's the only thing still on Isar post-Phase-1)
+      # has the same for its own schema file, and every AppLocalizations.of()
+      # call resolves against lib/l10n/generated/app_localizations.dart —
+      # all generated, none committed. Without these two steps, analyze/
+      # test fail on "target of URI doesn't exist" before ever reaching
+      # real issues — this isn't optional CI polish.
+      - name: Generate Drift + Isar code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Generate localization code
+        run: flutter gen-l10n
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze (fails on any issue, not just errors)
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: No TODO / FIXME / placeholder markers in lib/
+        run: |
+          if grep -rniE "TODO|FIXME|XXX:|not implemented|not built yet" lib/ \
+              --include="*.dart" \
+              | grep -viE "// TODO: add a station art asset"; then
+            echo "::warning::Found TODO/placeholder markers above. Not failing the build on this yet (several are honest, tracked scope notes rather than silent stubs — see PROJECT_MIGRATION_AUDIT.md and each file's doc comments) — tighten this to a hard failure once the tracked gaps are closed."
+          fi
+
+      # Real, not aspirational: checks that every worker the spec names
+      # actually exists as a file, so a future refactor can't silently
+      # delete one without CI noticing. List kept in sync with what's
+      # actually in lib/ — SyncWorker removed from this list when the
+      # class itself was deleted as dead code (PROJECT_MIGRATION_AUDIT.md
+      # Phase 4: its queueWrite() had zero real callers).
+      - name: Verify required workers exist
+        run: |
+          required="YoutubeWorker ProgramWorker VerseWorker PrayerWorker NotificationWorker ConversationWorker CleanupWorker DownloadWorker"
+          missing=0
+          for worker in $required; do
+            if ! grep -rlq "class $worker" lib/ 2>/dev/null; then
+              echo "::error::Missing required worker class: $worker"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: No hardcoded API keys
+        run: |
+          # Looks for suspicious inline secrets (long alnum strings assigned
+          # to a key-shaped variable) outside of generated files. Real keys
+          # in this repo are read via --dart-define (YouTube) or a
+          # Cloudflare Worker's own secret store (Groq), never inlined —
+          # this is a regression guard, not a promise the app has zero
+          # secrets.
+          if grep -rnE "(api[_-]?key|apikey|secret)['\"]?\s*[:=]\s*['\"][A-Za-z0-9_-]{20,}['\"]" \
+              lib/ --include="*.dart"; then
+            echo "::error::Possible hardcoded API key found above."
+            exit 1
+          fi
+
+      - name: Run tests with coverage
+        run: flutter test --coverage --reporter expanded
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: warn

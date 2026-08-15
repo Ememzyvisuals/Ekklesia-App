@@ -1,0 +1,141 @@
+name: ekklesia
+description: "Ekklesia — streaming, Bible study, and AI-assisted discipleship for DCLM and Christians everywhere."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  # riverpod_annotation removed — nothing in this codebase uses @riverpod
+  # code generation; every provider is a plain Provider/StateProvider/
+  # FutureProvider.
+
+  # Navigation
+  go_router: ^14.2.0
+
+  # Firebase/Firestore removed entirely — the app is offline-first now.
+  # firebase_core, cloud_firestore, and cloud_functions are gone; every
+  # feature that used to live there is Drift- or asset-backed (see
+  # PROJECT_MIGRATION_AUDIT.md and OFFLINE_ENGINE.md). Groq and YouTube
+  # sync still go through the Cloudflare Workers in cloudflare/
+  # groq-proxy/ and cloudflare/youtube-sync/ — those were never
+  # Firebase, so they're unaffected by this removal.
+  # Local notifications only, no FCM.
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4 # zonedSchedule requires this for scheduled local notifications
+
+  # Local storage
+  # isar / isar_flutter_libs — being migrated OFF per PROJECT_MIGRATION_AUDIT.md
+  # Phase 1. Left in place until bible_repository.dart and the annotations
+  # repository are fully cut over to Drift (see app_database.dart) — removing
+  # them now would break the still-Isar-backed code paths mid-migration.
+  #
+  # Switched to isar_community / isar_community_generator (drop-in fork,
+  # same API under package:isar_community/isar.dart): upstream isar/
+  # isar_generator's last release permanently caps analyzer <6.0.0, which
+  # made it impossible to satisfy alongside drift_dev at any version —
+  # pinning drift_dev down to clear that cap just pushed the same
+  # analyzer/web-version conflict onto other packages (drift, then
+  # cached_network_image) instead of fixing it. isar_community_generator
+  # tracks a current analyzer range, so drift_dev/drift go back to normal
+  # unpinned ranges below.
+  isar_community: ^3.3.2
+  isar_community_flutter_libs: ^3.3.2
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  path: ^1.9.0
+  flutter_secure_storage: ^9.2.2 # Groq user key — see user_groq_key_service.dart migration note
+  uuid: ^4.4.0 # LocalProfile id generation — see profile_repository.dart
+
+  # On-device TTS (PROJECT_MIGRATION_AUDIT.md Phase 5). sherpa_onnx wraps
+  # ONNX Runtime for mobile and loads the MMS VITS models converted by
+  # Renpiper-mms-onnx-V1_build_and_publish.ipynb — see
+  # TTS_ARCHITECTURE.md. Version not verified against pub.dev's current
+  # listing from this environment (no network access to pub.dev here) —
+  # check for the latest 1.x release before building.
+  sherpa_onnx: ^1.10.30
+  # English uses system TTS (spec §20), not a downloaded model.
+  flutter_tts: ^4.2.0
+  shared_preferences: ^2.2.3
+
+  # Media
+  just_audio: ^0.9.40
+  just_audio_background: ^0.0.1-beta.13
+  youtube_player_flutter: ^9.0.3
+
+  # Networking
+  http: ^1.2.2
+  dio: ^5.5.0+1
+
+  # Utilities
+  flutter_svg: ^2.0.10+1 # renders assets/avatars/*.svg (default illustrated avatars)
+  url_launcher: ^6.3.1 # Games: external launch path for entries without embed permission
+  webview_flutter: ^4.10.0 # Games: in-app embed + local-import play path
+  file_picker: ^8.1.2 # Games: lets the user pick a packaged .zip game file to import
+  archive: ^3.6.1 # Games: extracts an imported .zip game bundle to local storage
+  cached_network_image: ^3.4.1 # video/game thumbnails
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.4
+  # Deliberately unpinned — flutter_localizations (Flutter SDK) requires
+  # an exact intl version that changes with each Flutter release
+  # (currently 0.20.2). Pinning this to a caret range (e.g. ^0.19.0)
+  # creates a version-solving conflict the moment the SDK's requirement
+  # moves past that range — exactly what broke CI here. `intl: any` lets
+  # pub resolve to whatever the SDK actually ships. Only basic
+  # DateFormat(...) calls in this codebase (bookmarks_screen.dart,
+  # notifications_screen.dart, video_player_screen.dart) — stable across
+  # 0.19->0.20, so this is safe.
+  intl: any
+  # freezed_annotation/json_annotation removed — nothing in this codebase
+  # uses @freezed or @JsonSerializable; every model is a hand-written
+  # class (Drift generates its own row classes; the rest are plain Dart).
+  # flutter_dotenv removed — see main.dart's note on why .env is gone
+  # entirely, not just its content emptied.
+  google_fonts: ^6.2.1
+  # connectivity_plus removed — its only caller was SyncWorker
+  # (PROJECT_MIGRATION_AUDIT.md Phase 4: deleted as dead code, zero real
+  # callers of its own queueWrite()). Nothing else in the app needs a
+  # connectivity listener.
+  crypto: ^3.0.3 # sha256 checksum verification for completed downloads (DownloadWorker)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.11
+  # riverpod_generator/freezed/json_serializable removed — nothing
+  # generates code from @riverpod/@freezed/@JsonSerializable in this
+  # codebase (see the runtime-package removal notes above). This also
+  # removes the isar_generator-vs-freezed version-pin workaround that
+  # used to live here — it only existed to accommodate a package that
+  # was never actually used.
+  isar_community_generator: ^3.3.2
+  # Back to a normal caret range — see the isar_community switch note in
+  # dependencies above for why this no longer needs pinning.
+  drift_dev: ^2.20.3
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/audio/
+    - assets/avatars/
+    - assets/data/games.json
+    - assets/data/programs.json
+    - assets/data/messages.json
+    - assets/bible/manifest.json
+    - assets/bible/en.json
+    - assets/bible/yo.json
+    - assets/bible/ha.json
+    - assets/bible/ig.json
+    - assets/bible/pcm.json
