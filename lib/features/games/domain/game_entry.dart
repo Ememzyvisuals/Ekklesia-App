@@ -34,6 +34,7 @@ class GameEntry {
   final String id;
   final String title;
   final String description;
+
   /// Remote thumbnail URL (bundled catalog entries only). Empty for local
   /// entries — see [thumbnailPath] instead.
   final String thumbnailUrl;

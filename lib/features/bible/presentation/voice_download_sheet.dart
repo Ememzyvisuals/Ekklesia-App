@@ -176,7 +176,8 @@ class _VoiceRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
                 if (status == TtsModelDownloadStatus.error &&
                     info?.errorMessage != null)
                   Text(

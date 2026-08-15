@@ -101,8 +101,7 @@ class GroqService {
     return chat([
       const GroqMessage(
         role: 'system',
-        content:
-            'You summarize Christian sermon transcripts into 3-5 short, '
+        content: 'You summarize Christian sermon transcripts into 3-5 short, '
             'clear bullet points highlighting the key teaching points. '
             'Keep language simple and direct.',
       ),
@@ -116,8 +115,7 @@ class GroqService {
     return chat([
       GroqMessage(
         role: 'system',
-        content:
-            'You generate multiple-choice quiz questions from a sermon '
+        content: 'You generate multiple-choice quiz questions from a sermon '
             'transcript. Respond with ONLY valid JSON, no markdown fences, '
             'no preamble. Shape: '
             '{"questions": [{"question": "...", "options": ["...","...","...","..."], '
@@ -128,10 +126,8 @@ class GroqService {
   }
 
   List<Map<String, dynamic>> parseQuizJson(String rawJson) {
-    final cleaned = rawJson
-        .replaceAll('```json', '')
-        .replaceAll('```', '')
-        .trim();
+    final cleaned =
+        rawJson.replaceAll('```json', '').replaceAll('```', '').trim();
     final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
     return (decoded['questions'] as List<dynamic>).cast<Map<String, dynamic>>();
   }

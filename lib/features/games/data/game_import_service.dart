@@ -42,8 +42,7 @@ class GameImportService {
       final path = picked?.files.single.path;
       if (path == null) {
         // User cancelled the picker — not an error.
-        return const Result.failure(
-            AppFailure(message: '', retryable: false));
+        return const Result.failure(AppFailure(message: '', retryable: false));
       }
       return importFromZipPath(path);
     } catch (e) {
@@ -67,8 +66,7 @@ class GameImportService {
       await targetDir.create(recursive: true);
       for (final entry in archive) {
         final outPath = p.normalize(p.join(targetDir.path, entry.name));
-        if (!p.isWithin(targetDir.path, outPath) &&
-            outPath != targetDir.path) {
+        if (!p.isWithin(targetDir.path, outPath) && outPath != targetDir.path) {
           throw const FormatException(
               'This file contains an unsafe path and was rejected.');
         }

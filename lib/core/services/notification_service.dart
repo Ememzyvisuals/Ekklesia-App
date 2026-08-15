@@ -52,8 +52,7 @@ class NotificationService {
       requestSoundPermission: true,
     );
     await _plugin.initialize(
-      const InitializationSettings(
-          android: androidSettings, iOS: iosSettings),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
 
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<
@@ -131,7 +130,10 @@ class NotificationService {
     final (title, body) = switch (reminderType) {
       'daily_verse' => ("Today's Verse", 'Your daily verse is ready to read.'),
       'prayer' => ("Today's Prayer", 'Take a moment for today\'s prayer.'),
-      'reading' => ('Reading Reminder', 'Continue where you left off in the Bible.'),
+      'reading' => (
+          'Reading Reminder',
+          'Continue where you left off in the Bible.'
+        ),
       _ => ('Ekklesia', 'You have a reminder.'),
     };
 
@@ -165,7 +167,8 @@ class NotificationService {
     return scheduled;
   }
 
-  int _notificationIdFor(String reminderType) => reminderType.hashCode & 0x7fffffff;
+  int _notificationIdFor(String reminderType) =>
+      reminderType.hashCode & 0x7fffffff;
 
   // ---- Immediate local notifications (download complete, sync complete) ----
 
@@ -188,7 +191,8 @@ class NotificationService {
         android: AndroidNotificationDetails(
           'ekklesia_events',
           'App events',
-          channelDescription: 'Download/sync completion and other one-off events',
+          channelDescription:
+              'Download/sync completion and other one-off events',
           importance: Importance.low,
         ),
         iOS: DarwinNotificationDetails(),
@@ -198,7 +202,9 @@ class NotificationService {
   }
 
   Future<void> _recordHistory(
-      {required String title, required String body, required String type}) async {
+      {required String title,
+      required String body,
+      required String type}) async {
     final db = AppDatabaseService.instance.database;
     await db.into(db.appNotifications).insert(
           AppNotificationsCompanion.insert(

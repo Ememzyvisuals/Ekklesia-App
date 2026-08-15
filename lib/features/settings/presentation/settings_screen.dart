@@ -72,7 +72,8 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.record_voice_over_outlined),
             title: const Text('Offline voices'),
-            subtitle: const Text('Download or remove on-device Bible narration voices'),
+            subtitle: const Text(
+                'Download or remove on-device Bible narration voices'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showModalBottomSheet(
               context: context,

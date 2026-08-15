@@ -75,49 +75,48 @@ class BookmarksScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).bookmarksTitle)),
       body: StreamBuilder<List<BookmarkItem>>(
-              stream: ref.watch(bookmarkRepositoryProvider).watchAll(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final bookmarks = snapshot.data ?? [];
-                if (bookmarks.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        AppLocalizations.of(context).bookmarksEmpty,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  itemCount: bookmarks.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = bookmarks[index];
-                    return ListTile(
-                      leading:
-                          Icon(_iconFor(item.type), color: AppColors.accent),
-                      title: Text(item.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: item.subtitle.isNotEmpty
-                          ? Text(item.subtitle,
-                              maxLines: 1, overflow: TextOverflow.ellipsis)
-                          : null,
-                      trailing: Text(
-                        DateFormat('MMM d').format(item.createdAt),
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.textSecondary),
-                      ),
-                      onTap: () => _open(context, item),
-                    );
-                  },
-                );
-              },
-            ),
+        stream: ref.watch(bookmarkRepositoryProvider).watchAll(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final bookmarks = snapshot.data ?? [];
+          if (bookmarks.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  AppLocalizations.of(context).bookmarksEmpty,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            );
+          }
+          return ListView.separated(
+            itemCount: bookmarks.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final item = bookmarks[index];
+              return ListTile(
+                leading: Icon(_iconFor(item.type), color: AppColors.accent),
+                title: Text(item.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: item.subtitle.isNotEmpty
+                    ? Text(item.subtitle,
+                        maxLines: 1, overflow: TextOverflow.ellipsis)
+                    : null,
+                trailing: Text(
+                  DateFormat('MMM d').format(item.createdAt),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.textSecondary),
+                ),
+                onTap: () => _open(context, item),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

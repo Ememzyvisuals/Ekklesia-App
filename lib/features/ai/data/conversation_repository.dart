@@ -40,7 +40,9 @@ class ConversationRepository {
     if (query.trim().isEmpty) return [];
     final messages = await allMessages();
     final needle = query.toLowerCase();
-    return messages.where((m) => m.text.toLowerCase().contains(needle)).toList();
+    return messages
+        .where((m) => m.text.toLowerCase().contains(needle))
+        .toList();
   }
 
   Future<void> save(ConversationMessage message) {

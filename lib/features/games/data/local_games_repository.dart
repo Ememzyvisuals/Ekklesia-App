@@ -9,8 +9,7 @@ import '../domain/game_entry.dart';
 /// pattern used by non-Riverpod call sites.
 class LocalGamesRepository {
   LocalGamesRepository._internal();
-  static final LocalGamesRepository instance =
-      LocalGamesRepository._internal();
+  static final LocalGamesRepository instance = LocalGamesRepository._internal();
 
   AppDatabase get _db => AppDatabaseService.instance.database;
 

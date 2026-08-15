@@ -30,8 +30,7 @@ class AvatarView extends StatelessWidget {
   }
 
   Widget _svgFallback(BuildContext context) {
-    final option =
-        AvatarService.instance.byId(avatarId ?? '') ??
+    final option = AvatarService.instance.byId(avatarId ?? '') ??
         AvatarService.catalog.first;
     return ClipOval(
       child: SvgPicture.asset(

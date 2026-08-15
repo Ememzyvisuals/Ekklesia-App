@@ -30,7 +30,8 @@ class BookmarkRepository {
   /// know if its one item is saved.
   Future<bool> isBookmarked(BookmarkType type, String refId) async {
     final row = await (db.select(db.bookmarks)
-          ..where((t) => t.id.equals(BookmarkItem.deterministicId(type, refId))))
+          ..where(
+              (t) => t.id.equals(BookmarkItem.deterministicId(type, refId))))
         .getSingleOrNull();
     return row != null;
   }
@@ -51,7 +52,8 @@ class BookmarkRepository {
 
   Future<void> remove(BookmarkType type, String refId) {
     return (db.delete(db.bookmarks)
-          ..where((t) => t.id.equals(BookmarkItem.deterministicId(type, refId))))
+          ..where(
+              (t) => t.id.equals(BookmarkItem.deterministicId(type, refId))))
         .go();
   }
 

@@ -141,9 +141,9 @@ class _LiveBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
           color: AppColors.error, borderRadius: BorderRadius.circular(6)),
-      child: Row(
+      child: const Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           Icon(Icons.circle, size: 8, color: Colors.white),
           SizedBox(width: 6),
           Text('LIVE',

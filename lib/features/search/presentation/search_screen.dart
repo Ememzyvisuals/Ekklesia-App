@@ -137,8 +137,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       for (final m in messages) {
         results.add(_SearchResult(
           type: _SearchSourceType.aiConversation,
-          title:
-              m.text.length > 80 ? '${m.text.substring(0, 77)}...' : m.text,
+          title: m.text.length > 80 ? '${m.text.substring(0, 77)}...' : m.text,
           subtitle: m.role == 'user' ? 'You asked' : 'AI replied',
           payload: m,
         ));
@@ -186,11 +185,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
     }
 
-    if (mounted)
+    if (mounted) {
       setState(() {
         _results = results;
         _loading = false;
       });
+    }
   }
 
   void _open(_SearchResult result) {

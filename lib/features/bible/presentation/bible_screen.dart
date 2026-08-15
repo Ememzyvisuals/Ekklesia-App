@@ -7,7 +7,6 @@ import 'package:just_audio/just_audio.dart' show PlayerState;
 
 import '../../../core/config/app_theme.dart';
 import '../../../core/services/tts_service.dart';
-import '../../../core/services/tts_model_registry.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../bookmarks/presentation/bookmark_button.dart';
@@ -155,14 +154,17 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   }
 
   Future<void> _listenToChapter() async {
-    if (_verses.isEmpty || _selectedBook == null || _selectedChapter == null)
+    if (_verses.isEmpty || _selectedBook == null || _selectedChapter == null) {
       return;
+    }
     final bibleLanguage = ref.read(bibleLanguageProvider);
     final book = _selectedBook!;
     final chapterNumber = _selectedChapter!;
     final ekklesiaLanguage = _ekklesiaLanguageFor(bibleLanguage);
-    final fullText =
-        _verses.map((v) => v.content ?? '').where((t) => t.isNotEmpty).join(' ');
+    final fullText = _verses
+        .map((v) => v.content ?? '')
+        .where((t) => t.isNotEmpty)
+        .join(' ');
     final contentHash = BibleAudioCache.hashFor(fullText);
     final cache = ref.read(bibleAudioCacheProvider);
 
@@ -245,8 +247,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       setState(() => _error = null);
       _promptModelDownload(e.mmsCode);
     } on TtsLanguageUnavailableException {
-      setState(() => _error =
-          'No offline voice is available for this language yet.');
+      setState(() =>
+          _error = 'No offline voice is available for this language yet.');
     } on TtsGenerationException catch (e) {
       setState(() => _error = _friendlyTtsError(e));
     } catch (e) {
@@ -398,7 +400,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.menu_book_outlined,
+            const Icon(Icons.menu_book_outlined,
                 size: 48, color: AppColors.textSecondary),
             const SizedBox(height: 16),
             Text(
@@ -526,8 +528,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         final v = _searchResults[i];
         return ListTile(
           title: Text('${v.bookCode} ${v.chapter}:${v.number}'),
-          subtitle:
-              Text(v.content ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+          subtitle: Text(v.content ?? '',
+              maxLines: 2, overflow: TextOverflow.ellipsis),
           onTap: () async {
             final repo = ref.read(bibleRepositoryProvider);
             final books = await repo.getBooks(bibleLanguage);
@@ -605,8 +607,9 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     if (_loadingVerses) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_selectedBook == null || _selectedChapter == null)
+    if (_selectedBook == null || _selectedChapter == null) {
       return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -624,24 +627,24 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
               if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
                   EkklesiaLanguage.igbo)
                 ElevatedButton.icon(
-                onPressed: _loadingAudio ? null : _listenToChapter,
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 150),
-                  child: _loadingAudio
-                      ? const SizedBox(
-                          key: ValueKey('spinner'),
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.volume_up_rounded,
-                          key: ValueKey('icon')),
+                  onPressed: _loadingAudio ? null : _listenToChapter,
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 150),
+                    child: _loadingAudio
+                        ? const SizedBox(
+                            key: ValueKey('spinner'),
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.volume_up_rounded,
+                            key: ValueKey('icon')),
+                  ),
+                  label: Text(_loadingAudio
+                      ? (_queueProgressLabel ?? l10n.bibleGenerating)
+                      : l10n.bibleListen),
                 ),
-                label: Text(_loadingAudio
-                    ? (_queueProgressLabel ?? l10n.bibleGenerating)
-                    : l10n.bibleListen),
-              ),
             ],
           ),
         ),
@@ -663,8 +666,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
             return Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -677,8 +679,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                     child: Text(
                       'AI-generated voice — may mispronounce words or names.',
                       style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary(context)),
+                          fontSize: 12, color: AppTheme.textSecondary(context)),
                     ),
                   ),
                 ],
@@ -697,7 +698,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     '${v.number}. [${l10n.bibleNotIncluded}]',
-                    style: TextStyle(
+                    style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontStyle: FontStyle.italic),
                   ),
@@ -931,8 +932,9 @@ class _BookList extends ConsumerWidget {
     return FutureBuilder<List<BibleBook>>(
       future: repo.getBooks(bibleLanguage),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final books = snapshot.data!;
         final ot = books.where((b) => b.testament == 'OT').toList();
         final nt = books.where((b) => b.testament == 'NT').toList();

@@ -39,9 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
     if (result != null && result.isNotEmpty) {
-      await ref
-          .read(profileRepositoryProvider)
-          .update(displayName: result);
+      await ref.read(profileRepositoryProvider).update(displayName: result);
     }
   }
 

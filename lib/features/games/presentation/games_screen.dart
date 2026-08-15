@@ -20,7 +20,7 @@ class GamesScreen extends StatefulWidget {
 }
 
 class _GamesScreenState extends State<GamesScreen> {
-  final _repository = GamesRepository();
+  const _repository = GamesRepository();
   Result<List<GameEntry>> _result = const Result.loading();
   bool _importing = false;
 
@@ -254,8 +254,7 @@ class _GameGrid extends StatelessWidget {
           // Local (imported) games can be removed; bundled catalog
           // entries can't — there's nothing on-device to delete for
           // those, only a JSON row shipped in the app itself.
-          onLongPress:
-              game.isLocal ? () => onLongPressLocal(game) : null,
+          onLongPress: game.isLocal ? () => onLongPressLocal(game) : null,
           child: Container(
             decoration: BoxDecoration(
               color: AppTheme.surface(context),
@@ -272,7 +271,7 @@ class _GameGrid extends StatelessWidget {
                     children: [
                       _GameThumbnail(game: game),
                       if (game.isLocal)
-                        Positioned(
+                        const Positioned(
                           top: 6,
                           left: 6,
                           child: _OfflineBadge(),
