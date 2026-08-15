@@ -20,7 +20,7 @@ class GamesScreen extends StatefulWidget {
 }
 
 class _GamesScreenState extends State<GamesScreen> {
-  final _repository = GamesRepository();
+  const _repository = GamesRepository();
   Result<List<GameEntry>> _result = const Result.loading();
   bool _importing = false;
 

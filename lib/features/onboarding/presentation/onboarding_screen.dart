@@ -259,8 +259,7 @@ class _ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatars =
-        AvatarService.catalog.where((a) => a.gender == gender);
+    final avatars = AvatarService.catalog.where((a) => a.gender == gender);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
