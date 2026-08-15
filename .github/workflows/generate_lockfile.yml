@@ -1,0 +1,42 @@
+name: Generate pubspec.lock
+
+# One-off/rerunnable helper: Termux (or any machine without the Flutter
+# SDK) can't generate pubspec.lock locally. This runs `flutter pub get`
+# on a real GitHub runner and commits the result back to the branch it
+# was dispatched on — after this runs once, dependency_check.yml's
+# lockfile-sync check has something real to compare against. Re-run by
+# hand any time pubspec.yaml changes and you're not on a machine with
+# Flutter installed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Commit pubspec.lock if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.lock
+          if git diff --cached --quiet; then
+            echo "pubspec.lock already in sync — nothing to commit."
+          else
+            git commit -m "Generate pubspec.lock (via Actions, no local Flutter SDK)"
+            git push
+          fi
