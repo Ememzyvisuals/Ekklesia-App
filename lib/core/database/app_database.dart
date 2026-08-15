@@ -80,10 +80,8 @@ class BibleVerses extends Table {
   IntColumn get number => integer()();
   TextColumn get content => text().nullable()();
   BoolColumn get omitted => boolean().withDefault(const Constant(false))();
-  BoolColumn get approximate =>
-      boolean().withDefault(const Constant(false))();
-  TextColumn get normalizedText =>
-      text().withDefault(const Constant(''))();
+  BoolColumn get approximate => boolean().withDefault(const Constant(false))();
+  TextColumn get normalizedText => text().withDefault(const Constant(''))();
 
   @override
   List<Set<Column>> get uniqueKeys => [
@@ -171,7 +169,8 @@ class YoutubeVideos extends Table {
   TextColumn get liveStatus =>
       text().withDefault(const Constant('none'))(); // 'none'|'live'|'upcoming'
   TextColumn get category => text().nullable()();
-  TextColumn get aiOverviewJson => text().nullable()(); // cached MessageOverview, see message_overview_service.dart
+  TextColumn get aiOverviewJson => text()
+      .nullable()(); // cached MessageOverview, see message_overview_service.dart
 
   @override
   Set<Column> get primaryKey => {videoId};
@@ -200,8 +199,8 @@ class AppNotifications extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()();
   TextColumn get body => text()();
-  TextColumn get type =>
-      text().withDefault(const Constant('other'))(); // maps to NotificationCategory
+  TextColumn get type => text()
+      .withDefault(const Constant('other'))(); // maps to NotificationCategory
   BoolColumn get read => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
 }
@@ -288,7 +287,8 @@ class QuizAttempts extends Table {
 /// tts_model_registry.dart for the actual download/lifecycle logic —
 /// this table is just the persisted state.
 class TtsModelStatus extends Table {
-  TextColumn get language => text()(); // 'yor'|'hau'|'pcm' — MMS codes, see LocalTtsEngine
+  TextColumn get language =>
+      text()(); // 'yor'|'hau'|'pcm' — MMS codes, see LocalTtsEngine
   TextColumn get status =>
       text().withDefault(const Constant('not_installed'))();
   // 'not_installed'|'downloading'|'ready'|'error' — spec §45's exact list
@@ -352,8 +352,7 @@ class LocalGames extends Table {
   TextColumn get id => text()(); // uuid, generated at import time
   TextColumn get title => text()();
   TextColumn get description => text().withDefault(const Constant(''))();
-  TextColumn get category =>
-      text().withDefault(const Constant('Imported'))();
+  TextColumn get category => text().withDefault(const Constant('Imported'))();
   TextColumn get ageRating => text().withDefault(const Constant('All ages'))();
   TextColumn get developer => text().withDefault(const Constant('You'))();
   // Absolute path to the extracted bundle's index.html — passed straight

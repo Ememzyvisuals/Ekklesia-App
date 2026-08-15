@@ -39,8 +39,10 @@ class ProfileRepository {
   final AppDatabase db;
 
   Stream<LocalProfile?> watch() {
-    return db.select(db.localProfiles).watch().map(
-        (rows) => rows.isEmpty ? null : _toModel(rows.first));
+    return db
+        .select(db.localProfiles)
+        .watch()
+        .map((rows) => rows.isEmpty ? null : _toModel(rows.first));
   }
 
   Future<LocalProfile?> get() async {
@@ -94,12 +96,10 @@ class ProfileRepository {
     if (existing == null) {
       throw StateError('update() called before onboarding created a profile.');
     }
-    await (db.update(db.localProfiles)
-          ..where((t) => t.id.equals(existing.id)))
+    await (db.update(db.localProfiles)..where((t) => t.id.equals(existing.id)))
         .write(LocalProfilesCompanion(
-      displayName: displayName != null
-          ? Value(displayName)
-          : const Value.absent(),
+      displayName:
+          displayName != null ? Value(displayName) : const Value.absent(),
       avatarId: avatarId != null ? Value(avatarId) : const Value.absent(),
       preferredLanguage: preferredLanguage != null
           ? Value(preferredLanguage)

@@ -7,6 +7,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/shared/result.dart';
 import '../domain/video_entry.dart';
+
 const _ytBase = 'https://www.googleapis.com/youtube/v3';
 
 /// Ported from cloudflare/youtube-sync/src/youtube.ts's `CATEGORY_KEYWORDS`
@@ -106,7 +107,8 @@ _ParsedVideo _parseVideoItem(Map<String, dynamic> item) {
     videoId: item['id'] as String,
     title: title,
     description: snippet['description'] as String? ?? '',
-    thumbnailUrl: _bestThumbnail(snippet['thumbnails'] as Map<String, dynamic>?),
+    thumbnailUrl:
+        _bestThumbnail(snippet['thumbnails'] as Map<String, dynamic>?),
     publishedAt: DateTime.tryParse(snippet['publishedAt'] as String? ?? '') ??
         DateTime.now(),
     channelTitle: snippet['channelTitle'] as String? ?? 'DCLM',
@@ -206,21 +208,22 @@ class YoutubeRepository {
   /// quota units, which is why this only runs on a timer/foreground
   /// trigger (YoutubeWorker), never per screen build.
   Future<Result<void>> refresh() async {
-    final apiKey = AppConfig.youtubeApiKey;
+    const apiKey = AppConfig.youtubeApiKey;
     try {
       final channelJson = await _fetchJson(
         '$_ytBase/channels?part=contentDetails&id=${AppConfig.youtubeChannelId}&key=$apiKey',
       );
       final channelItems =
           (channelJson['items'] as List?)?.cast<Map<String, dynamic>>();
-      final firstChannel =
-          (channelItems != null && channelItems.isNotEmpty) ? channelItems.first : null;
+      final firstChannel = (channelItems != null && channelItems.isNotEmpty)
+          ? channelItems.first
+          : null;
       final uploadsPlaylistId = ((firstChannel?['contentDetails']
               as Map<String, dynamic>?)?['relatedPlaylists']
           as Map<String, dynamic>?)?['uploads'] as String?;
       if (uploadsPlaylistId == null) {
-        return Result.failure(AppFailure(
-            message: 'Could not resolve DCLM\'s uploads playlist.'));
+        return const Result.failure(
+            AppFailure(message: 'Could not resolve DCLM\'s uploads playlist.'));
       }
 
       final playlistJson = await _fetchJson(
@@ -229,9 +232,8 @@ class YoutubeRepository {
       );
       final videoIds = ((playlistJson['items'] as List?) ?? [])
           .cast<Map<String, dynamic>>()
-          .map((item) =>
-              (item['snippet'] as Map<String, dynamic>?)?['resourceId']
-                  as Map<String, dynamic>?)
+          .map((item) => (item['snippet']
+              as Map<String, dynamic>?)?['resourceId'] as Map<String, dynamic>?)
           .map((r) => r?['videoId'] as String?)
           .whereType<String>()
           .join(',');
@@ -269,8 +271,9 @@ class YoutubeRepository {
       );
       final searchItems =
           (searchJson['items'] as List?)?.cast<Map<String, dynamic>>();
-      final firstSearchResult =
-          (searchItems != null && searchItems.isNotEmpty) ? searchItems.first : null;
+      final firstSearchResult = (searchItems != null && searchItems.isNotEmpty)
+          ? searchItems.first
+          : null;
       final liveVideoId = (firstSearchResult?['id']
           as Map<String, dynamic>?)?['videoId'] as String?;
 
@@ -279,7 +282,8 @@ class YoutubeRepository {
           '$_ytBase/videos?part=snippet,contentDetails,liveStreamingDetails'
           '&id=$liveVideoId&key=$apiKey',
         );
-        final items = (detailsJson['items'] as List?)?.cast<Map<String, dynamic>>();
+        final items =
+            (detailsJson['items'] as List?)?.cast<Map<String, dynamic>>();
         if (items != null && items.isNotEmpty) {
           final v = _parseVideoItem(items.first);
           await db.into(db.youtubeLiveStatus).insertOnConflictUpdate(

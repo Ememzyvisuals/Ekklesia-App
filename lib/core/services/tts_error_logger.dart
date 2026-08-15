@@ -40,8 +40,7 @@ class TtsErrorLogger {
         'message': message,
         'created_at': DateTime.now().toIso8601String(),
       });
-      await file.writeAsString('$entry\n',
-          mode: FileMode.append, flush: false);
+      await file.writeAsString('$entry\n', mode: FileMode.append, flush: false);
       await _trimIfNeeded(file);
     } catch (_) {
       // Logging must never be the reason playback fails harder — if this
@@ -75,8 +74,7 @@ class TtsErrorLogger {
           return false; // malformed line — drop it
         }
       }).toList();
-      await file.writeAsString(
-          kept.isEmpty ? '' : '${kept.join('\n')}\n');
+      await file.writeAsString(kept.isEmpty ? '' : '${kept.join('\n')}\n');
     } catch (_) {
       // Best-effort housekeeping — never surface this to the user.
     }

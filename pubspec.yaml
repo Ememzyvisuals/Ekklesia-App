@@ -106,6 +106,7 @@ dependencies:
   # connectivity listener.
   crypto: ^3.0.3 # sha256 checksum verification for completed downloads (DownloadWorker)
 
+  sqlite3: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

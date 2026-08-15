@@ -107,14 +107,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: (i) => setState(() => _page = i),
                 children: [
-                  _WelcomePage(
+                  const _WelcomePage(
                     title: 'Welcome to Ekklesia',
                     subtitle: 'Sermons, Bible study, and an AI companion for '
                         'DCLM members and Christians everywhere — in your '
                         'own language.',
                     icon: Icons.church,
                   ),
-                  _WelcomePage(
+                  const _WelcomePage(
                     title: 'Listen Anywhere',
                     subtitle: 'DCLM radio and messages keep playing even '
                         'when your screen locks.',
@@ -134,7 +134,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     gender: _gender,
                     onGenderSelect: (v) => setState(() {
                       _gender = v;
-                      _selectedAvatarId = null; // re-pick default for new gender
+                      _selectedAvatarId =
+                          null; // re-pick default for new gender
                     }),
                     selectedAvatarId: _selectedAvatarId,
                     onAvatarSelect: (id) =>

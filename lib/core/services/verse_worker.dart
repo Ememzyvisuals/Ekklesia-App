@@ -65,12 +65,11 @@ class VerseWorker {
   String _referenceForDate(DateTime date) {
     final dateKey = _dateKey(date);
     final random = Random(dateKey.hashCode);
-    return AppConfig
-        .verseFallbackReferences[random.nextInt(AppConfig.verseFallbackReferences.length)];
+    return AppConfig.verseFallbackReferences[
+        random.nextInt(AppConfig.verseFallbackReferences.length)];
   }
 
-  String _dateKey(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
+  String _dateKey(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 }

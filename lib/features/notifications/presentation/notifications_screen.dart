@@ -43,65 +43,62 @@ class NotificationsScreen extends StatelessWidget {
       appBar:
           AppBar(title: Text(AppLocalizations.of(context).notificationsTitle)),
       body: StreamBuilder<List<CategorizedNotification>>(
-              stream: NotificationWorker.instance.stream(null),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Could not load notifications: ${snapshot.error}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  );
-                }
-                final notifications = snapshot.data ?? [];
-                if (notifications.isEmpty) {
-                  return Center(
-                    child: Text(
-                      AppLocalizations.of(context).notificationsEmpty,
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  itemCount: notifications.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final n = notifications[index];
-                    return ListTile(
-                      leading: Icon(
-                        _iconFor(n.category),
-                        color: n.read
-                            ? AppColors.textSecondary
-                            : AppColors.primary,
-                      ),
-                      title: Text(
-                        n.title,
-                        style: TextStyle(
-                          fontWeight:
-                              n.read ? FontWeight.normal : FontWeight.bold,
-                        ),
-                      ),
-                      subtitle: Text(n.body),
-                      trailing: Text(
-                        DateFormat('MMM d, h:mm a').format(n.createdAt),
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.textSecondary),
-                      ),
-                      onTap: n.read
-                          ? null
-                          : () => NotificationWorker.instance.markAsRead(n.id),
-                    );
-                  },
-                );
-              },
-            ),
+        stream: NotificationWorker.instance.stream(null),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load notifications: ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            );
+          }
+          final notifications = snapshot.data ?? [];
+          if (notifications.isEmpty) {
+            return Center(
+              child: Text(
+                AppLocalizations.of(context).notificationsEmpty,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+            );
+          }
+          return ListView.separated(
+            itemCount: notifications.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final n = notifications[index];
+              return ListTile(
+                leading: Icon(
+                  _iconFor(n.category),
+                  color: n.read ? AppColors.textSecondary : AppColors.primary,
+                ),
+                title: Text(
+                  n.title,
+                  style: TextStyle(
+                    fontWeight: n.read ? FontWeight.normal : FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(n.body),
+                trailing: Text(
+                  DateFormat('MMM d, h:mm a').format(n.createdAt),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.textSecondary),
+                ),
+                onTap: n.read
+                    ? null
+                    : () => NotificationWorker.instance.markAsRead(n.id),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

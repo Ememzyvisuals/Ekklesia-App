@@ -55,7 +55,7 @@ class PrayerWorker {
     String source;
     try {
       text = await GroqService.instance.chat([
-        GroqMessage(
+        const GroqMessage(
           role: 'system',
           content: 'You write short, warm, biblically grounded daily prayers '
               '(4-6 sentences) for a Christian devotional app. Base the '

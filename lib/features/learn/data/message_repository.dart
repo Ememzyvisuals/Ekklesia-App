@@ -190,9 +190,7 @@ class MessageRepository {
       // explicitly supplies its own — a content update shouldn't throw
       // away a Groq summary/quiz that already cost an API call.
       final mergedSummary = m.summary ?? existing?.summary;
-      final mergedQuiz = m.quiz != null
-          ? jsonEncode(m.quiz)
-          : existing?.quiz;
+      final mergedQuiz = m.quiz != null ? jsonEncode(m.quiz) : existing?.quiz;
       await _db.into(_db.messages).insertOnConflictUpdate(
             MessagesCompanion.insert(
               id: m.id,

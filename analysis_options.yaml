@@ -22,3 +22,10 @@ analyzer:
     # same reasoning, machine-written by `flutter gen-l10n`, never
     # hand-edited.
     - "lib/l10n/generated/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
