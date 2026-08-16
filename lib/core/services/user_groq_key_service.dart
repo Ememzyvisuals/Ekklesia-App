@@ -21,8 +21,26 @@ class UserGroqKeyService {
   final _storage = const FlutterSecureStorage();
 
   Future<String?> getKey() async {
-    final value = await _storage.read(key: _key);
-    return (value == null || value.trim().isEmpty) ? null : value.trim();
+    // Uncovered by the 5-minute-frozen-splash bug: this is called during
+    // AIConfig.verify() at app startup, before any other timeout
+    // protection applies. flutter_secure_storage's Android Keystore
+    // read has known reports of hanging (not throwing — hanging)
+    // indefinitely on certain devices/OEM skins, most often on the very
+    // first Keystore access on a fresh install, which is exactly what
+    // every user's first app launch is. Without this timeout, that
+    // single native call could freeze main() before runApp() forever,
+    // with no error, no crash, nothing — just a permanently frozen
+    // splash screen, which is exactly what got reported. A missing
+    // Groq key is a normal, expected state (most users haven't set one
+    // yet); it must never be allowed to block the app from opening.
+    try {
+      final value = await _storage
+          .read(key: _key)
+          .timeout(const Duration(seconds: 3));
+      return (value == null || value.trim().isEmpty) ? null : value.trim();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<bool> hasKey() async => (await getKey()) != null;

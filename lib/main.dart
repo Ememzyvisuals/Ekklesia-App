@@ -31,11 +31,24 @@ Future<void> main() async {
   // Enables lock-screen / notification-shade playback controls for radio
   // and sermon audio — this is the reliability feature the official DCLM
   // app doesn't have.
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.ememzyvisuals.ekklesia.audio',
-    androidNotificationChannelName: 'Ekklesia Audio',
-    androidNotificationOngoing: true,
-  );
+  //
+  // Timeout-guarded (see the same reasoning on IsarService.open() below):
+  // a native platform-channel call hanging here would freeze the splash
+  // screen forever with zero error, zero crash, before runApp() is ever
+  // reached — exactly what got reported after the first real-device
+  // install. Losing lock-screen audio controls on a device where this
+  // genuinely can't initialize is a minor, recoverable degradation; an
+  // app that never opens is not.
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.ememzyvisuals.ekklesia.audio',
+      androidNotificationChannelName: 'Ekklesia Audio',
+      androidNotificationOngoing: true,
+    ).timeout(const Duration(seconds: 5));
+  } catch (_) {
+    // Audio still plays without this — only lock-screen/notification
+    // controls are lost, never worth blocking app startup over.
+  }
 
   // Firebase/Firestore removed entirely — the app is offline-first now.
   // Every feature that used to live in Firestore (notifications, quiz
@@ -56,12 +69,36 @@ Future<void> main() async {
   // unlike Isar. Requires build_runner to have generated
   // bible_audio_cache_schema.g.dart and app_database.g.dart first (see
   // BIBLE_IMPORT_NOTES.md).
-  await IsarService.instance.open();
+  //
+  // Timeout-guarded for the same reason as JustAudioBackground.init
+  // above: native library loading (isar_community_flutter_libs) hanging
+  // here — rather than throwing — would silently freeze startup with no
+  // way to diagnose it from the UI. Audio caching degrades (TTS
+  // re-generates instead of reading a cache) rather than the whole app
+  // becoming unusable.
+  try {
+    await IsarService.instance.open().timeout(const Duration(seconds: 8));
+  } catch (_) {
+    // Bible audio caching won't work this session, but nothing else in
+    // the app depends on Isar anymore (see comment above) — everything
+    // else is Drift-backed and opens independently.
+  }
 
   // Cache the onboarding-seen flag synchronously for the router's
   // redirect logic (which can't await inside GoRouter's redirect callback
   // without extra plumbing) — read once here before the app builds.
-  onboardingSeenCache = await hasSeenOnboarding();
+  //
+  // Timeout-guarded: a SharedPreferences read should never realistically
+  // hang, but "should never" was true of every other call in this
+  // function too until a real device proved otherwise. Defaulting to
+  // `false` on timeout just means an already-onboarded user sees
+  // onboarding again once — mildly annoying, never app-breaking.
+  try {
+    onboardingSeenCache =
+        await hasSeenOnboarding().timeout(const Duration(seconds: 3));
+  } catch (_) {
+    onboardingSeenCache = false;
+  }
 
   // SyncWorker removed (PROJECT_MIGRATION_AUDIT.md Phase 4 dead-code
   // finding) — its queueWrite() had zero callers anywhere in the app;

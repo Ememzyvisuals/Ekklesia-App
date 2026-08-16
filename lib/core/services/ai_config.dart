@@ -37,7 +37,22 @@ class AIConfig {
   /// to the configured default (last-resort) if no key is set yet or the
   /// call fails — deliberately optimistic rather than blocking app
   /// startup on a network call succeeding.
+  ///
+  /// Wrapped in its own outer timeout in addition to the inner http
+  /// timeout below, and in addition to getKey()'s own timeout — belt and
+  /// suspenders after a real device showed the app can freeze permanently
+  /// on the splash screen if any single awaited call in main() hangs
+  /// rather than throws. This function must always return within a
+  /// bounded time no matter what breaks inside it.
   Future<void> verify() async {
+    try {
+      await _verify().timeout(const Duration(seconds: 10));
+    } catch (_) {
+      _verified = false;
+    }
+  }
+
+  Future<void> _verify() async {
     try {
       final apiKey = await UserGroqKeyService.instance.getKey();
       if (apiKey == null) {
