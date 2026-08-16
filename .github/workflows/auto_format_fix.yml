@@ -33,6 +33,17 @@ jobs:
       - name: Format all source files
         run: dart format .
 
+      # `dart fix --apply` applies every machine-suggested fix with zero
+      # review — it has twice now rewritten a valid instance field
+      # (`final x = GamesRepository();`) into `const x = ...`, which
+      # doesn't compile, and pushed straight to main both times because
+      # nothing here checked the result before committing. Re-run the
+      # same check flutter_ci.yml uses and refuse to commit/push if dart
+      # fix or format broke something — a failed auto-fix should mean
+      # "nothing happened", never "main is broken now".
+      - name: Verify analyze still passes after auto-fixes
+        run: flutter analyze --fatal-infos --fatal-warnings
+
       - name: Commit and push if anything changed
         run: |
           git config user.name "github-actions[bot]"

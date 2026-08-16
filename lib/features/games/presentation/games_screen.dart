@@ -20,13 +20,22 @@ class GamesScreen extends StatefulWidget {
 }
 
 class _GamesScreenState extends State<GamesScreen> {
-  const _repository = GamesRepository();
+  // Deliberately NOT a `final x = GamesRepository();` field initializer:
+  // this project's flutter_lints/analyzer combo (analyzer 10.2.0, see
+  // flutter_ci.yml's resolved-package log) has `dart fix --apply`
+  // mis-rewriting that exact shape to `const x = GamesRepository();` on
+  // an instance field, which doesn't compile (const_instance_field) —
+  // reproduced twice now via auto_format_fix.yml. Assigning in initState
+  // instead removes the pattern dart fix is matching on, so Auto-format
+  // & Auto-fix can't reintroduce this again on a future run.
+  late final GamesRepository _repository;
   Result<List<GameEntry>> _result = const Result.loading();
   bool _importing = false;
 
   @override
   void initState() {
     super.initState();
+    _repository = GamesRepository();
     _load();
   }
 
