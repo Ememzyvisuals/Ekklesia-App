@@ -79,22 +79,66 @@ jobs:
           # signingConfig wired to the release buildType — patch in a
           # real release signingConfig that reads the key.properties
           # above, following the standard Flutter release-signing setup.
+          #
+          # Flutter now defaults to the Kotlin DSL (build.gradle.kts),
+          # not Groovy (build.gradle) — confirmed the hard way: the first
+          # version of this patch injected Groovy syntax (`def x = ...`)
+          # unconditionally regardless of which file it found, which is
+          # not valid Kotlin and failed the whole Gradle script
+          # compilation with "Expecting an element". Kotlin needs
+          # `val`/`create("release")`/explicit imports where Groovy
+          # doesn't, so the two extensions need genuinely different
+          # injected text, not just a different file path.
           python3 - <<'PYEOF'
           import re, os
           path = "android/app/build.gradle"
           if not os.path.exists(path) and os.path.exists(path + ".kts"):
               path = path + ".kts"
+          is_kts = path.endswith(".kts")
           src = open(path).read()
           if "keystoreProperties" not in src:
-              inject = '''
+              if is_kts:
+                  if "java.util.Properties" not in src:
+                      src = (
+                          "import java.util.Properties\n"
+                          "import java.io.FileInputStream\n\n" + src
+                      )
+                  inject = '''
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          val keystoreProperties = Properties()
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+          }
+          '''
+                  src = src.replace("android {", inject + "\nandroid {", 1)
+                  release_signing = '''
+              signingConfigs {
+                  create("release") {
+                      if (keystorePropertiesFile.exists()) {
+                          keyAlias = keystoreProperties["keyAlias"] as String
+                          keyPassword = keystoreProperties["keyPassword"] as String
+                          storeFile = file(keystoreProperties["storeFile"] as String)
+                          storePassword = keystoreProperties["storePassword"] as String
+                      }
+                  }
+              }
+          '''
+                  src = re.sub(r"buildTypes \{", release_signing + "\n    buildTypes {", src, count=1)
+                  src = re.sub(
+                      r'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)',
+                      'signingConfig = signingConfigs.getByName("release")',
+                      src,
+                  )
+              else:
+                  inject = '''
           def keystorePropertiesFile = rootProject.file("key.properties")
           def keystoreProperties = new Properties()
           if (keystorePropertiesFile.exists()) {
               keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
           }
           '''
-              src = src.replace("android {", inject + "\nandroid {", 1)
-              release_signing = '''
+                  src = src.replace("android {", inject + "\nandroid {", 1)
+                  release_signing = '''
               signingConfigs {
                   release {
                       if (keystorePropertiesFile.exists()) {
@@ -106,11 +150,11 @@ jobs:
                   }
               }
           '''
-              src = re.sub(r"buildTypes \{", release_signing + "\n    buildTypes {", src, count=1)
-              src = src.replace(
-                  "signingConfig signingConfigs.debug",
-                  "signingConfig signingConfigs.release",
-              )
+                  src = re.sub(r"buildTypes \{", release_signing + "\n    buildTypes {", src, count=1)
+                  src = src.replace(
+                      "signingConfig signingConfigs.debug",
+                      "signingConfig signingConfigs.release",
+                  )
               open(path, "w").write(src)
               print(f"Patched {path} with release signing config.")
           else:
