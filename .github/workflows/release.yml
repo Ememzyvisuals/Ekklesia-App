@@ -101,6 +101,66 @@ jobs:
             exit 1
           fi
 
+      # The step above only touches :app. The actual failing subproject
+      # (:file_picker, and potentially others as more plugins update)
+      # is a SEPARATE Gradle module entirely — Flutter compiles every
+      # plugin's own Android code as its own subproject (see
+      # https://github.com/flutter/flutter/wiki/How-Flutter-apps-are-
+      # compiled-with-Gradle-for-Android), each with its own compileSdk
+      # declared inside that plugin's own pub-cache'd build.gradle.
+      # Editing :app can never fix a different subproject's own value.
+      # There is also a documented Flutter behavior where explicit
+      # compileSdk overrides in :app's build.gradle get silently
+      # re-forced back down by the Flutter Gradle plugin in some
+      # versions (flutter/flutter#174516) — so even :app isn't reliably
+      # fixed by editing that file alone.
+      #
+      # The actual fix, documented widely for this exact error across
+      # multiple plugins (file_picker, objectbox, adjust_sdk, and
+      # others hitting the same AAR-metadata check): force every
+      # subproject's compileSdk from the ROOT build.gradle, in an
+      # afterEvaluate block so it runs after each subproject — app or
+      # plugin — has already configured itself, guaranteeing this is
+      # the final word regardless of what that subproject set on its
+      # own.
+      - name: Force compileSdk 36 across all subprojects (root build.gradle)
+        run: |
+          path="android/build.gradle"
+          [ -f "$path" ] || path="android/build.gradle.kts"
+          if [[ "$path" == *.kts ]]; then
+            if ! grep -q "com.android.build.gradle.BaseExtension" "$path"; then
+              { printf 'import com.android.build.gradle.BaseExtension\n\n'; cat "$path"; } > "$path.tmp"
+              mv "$path.tmp" "$path"
+            fi
+            printf '\n' >> "$path"
+            cat >> "$path" <<'EOF'
+          subprojects {
+              afterEvaluate {
+                  val isAndroid = plugins.hasPlugin("com.android.application") ||
+                      plugins.hasPlugin("com.android.library")
+                  if (isAndroid) {
+                      val androidExt = extensions.findByName("android") as? BaseExtension
+                      androidExt?.compileSdkVersion(36)
+                  }
+              }
+          }
+          EOF
+          else
+            printf '\n' >> "$path"
+            cat >> "$path" <<'EOF'
+          subprojects {
+              afterEvaluate { proj ->
+                  if (proj.hasProperty("android")) {
+                      proj.android {
+                          compileSdkVersion 36
+                      }
+                  }
+              }
+          }
+          EOF
+          fi
+          echo "Force-set compileSdk 36 for all subprojects via $path"
+
       # flutter_local_notifications ^18.0.1 uses java.time APIs
       # internally that require Android core library desugaring to be
       # enabled — without this, assembleRelease fails outright at
