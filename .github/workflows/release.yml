@@ -27,6 +27,27 @@ jobs:
           cache: true
       - run: flutter pub get
 
+      # flutter_inappwebview_android (pulled in transitively by
+      # youtube_player_flutter — not a direct dependency of this app) has
+      # ^1.1.3's Android build.gradle calling
+      # getDefaultProguardFile('proguard-android.txt'), which R8 in
+      # current Android Gradle Plugin versions rejects outright ("no
+      # longer supported... includes -dontoptimize"). Nothing in this
+      # app's own code triggers this — it's the plugin's own bundled
+      # build.gradle failing to evaluate before this project's code is
+      # even touched. Patch it directly in the pub cache, the same
+      # "surgical hex-edit of a third-party file we don't own" approach
+      # as the Google Services Gradle-plugin patch used to be — except
+      # this one's actually necessary, not dead weight.
+      - name: Patch flutter_inappwebview_android proguard incompatibility
+        run: |
+          for f in "$PUB_CACHE"/hosted/pub.dev/flutter_inappwebview_android-*/android/build.gradle; do
+            if [ -f "$f" ] && grep -q "proguard-android.txt" "$f"; then
+              sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$f"
+              echo "Patched $f"
+            fi
+          done
+
       - name: Generate Drift + Isar code
         run: dart run build_runner build --delete-conflicting-outputs
 
