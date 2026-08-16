@@ -35,7 +35,7 @@ class _GamesScreenState extends State<GamesScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = GamesRepository();
+    _repository = const GamesRepository();
     _load();
   }
 
