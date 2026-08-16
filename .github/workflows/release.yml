@@ -127,13 +127,24 @@ jobs:
         run: |
           path="android/build.gradle"
           [ -f "$path" ] || path="android/build.gradle.kts"
+          # This MUST be prepended, not appended. flutter create's
+          # generated root file already has its own
+          # `subprojects { project.evaluationDependsOn(":app") }` line,
+          # and calling evaluationDependsOn forces :app to evaluate
+          # early — right then, mid-script. An afterEvaluate block
+          # appended AFTER that line in the file runs too late: :app has
+          # already finished evaluating by the time it's reached, and
+          # Gradle refuses to register afterEvaluate on an
+          # already-evaluated project ("Cannot run
+          # Project.afterEvaluate(Action) when the project is already
+          # evaluated" — confirmed by testing the appended version).
+          # Registering first, before that line even runs, avoids the
+          # ordering conflict entirely.
           if [[ "$path" == *.kts ]]; then
-            if ! grep -q "com.android.build.gradle.BaseExtension" "$path"; then
-              { printf 'import com.android.build.gradle.BaseExtension\n\n'; cat "$path"; } > "$path.tmp"
-              mv "$path.tmp" "$path"
-            fi
-            printf '\n' >> "$path"
-            cat >> "$path" <<'EOF'
+            cat "$path" > "$path.orig"
+            cat > "$path" <<'EOF'
+          import com.android.build.gradle.BaseExtension
+
           subprojects {
               afterEvaluate {
                   val isAndroid = plugins.hasPlugin("com.android.application") ||
@@ -144,10 +155,13 @@ jobs:
                   }
               }
           }
+
           EOF
+            cat "$path.orig" >> "$path"
+            rm "$path.orig"
           else
-            printf '\n' >> "$path"
-            cat >> "$path" <<'EOF'
+            cat "$path" > "$path.orig"
+            cat > "$path" <<'EOF'
           subprojects {
               afterEvaluate { proj ->
                   if (proj.hasProperty("android")) {
@@ -157,7 +171,10 @@ jobs:
                   }
               }
           }
+
           EOF
+            cat "$path.orig" >> "$path"
+            rm "$path.orig"
           fi
           echo "Force-set compileSdk 36 for all subprojects via $path"
 
