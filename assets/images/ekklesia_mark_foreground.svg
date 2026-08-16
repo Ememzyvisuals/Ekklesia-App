@@ -1,0 +1,37 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ekklesia">
+  <!-- Foreground-only layer for Android adaptive icons: same mark as
+       ekklesia_mark.svg with the background square stripped out and the
+       artwork scaled/centered into the adaptive-icon safe zone (Android
+       crops/masks the outer ~33% on every side depending on launcher
+       shape, so content needs padding room the flat icon doesn't). Pair
+       with adaptive_icon_background: "#1F5E3B" in
+       flutter_launcher_icons' pubspec.yaml config — do not add a
+       background rect here, the OS supplies it. -->
+  <g transform="translate(97.28,109.68) scale(0.62)">
+    <rect x="246" y="322" width="20" height="30" rx="8" fill="#0F2E1C" opacity="0.55"/>
+    <path
+      d="M256,188
+         C 195,150 140,148 116,168
+         C 96,186 92,250 100,300
+         C 106,326 130,338 160,342
+         C 190,346 226,346 256,344
+         Z"
+      fill="#F5F4EF"/>
+    <path
+      d="M256,188
+         C 317,150 372,148 396,168
+         C 416,186 420,250 412,300
+         C 406,326 382,338 352,342
+         C 322,346 286,346 256,344
+         Z"
+      fill="#F5F4EF"/>
+    <path d="M256,196 C 220,210 172,214 130,206" stroke="#DEDBCF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+    <path d="M256,196 C 292,210 340,214 382,206" stroke="#DEDBCF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+    <path
+      d="M256,344
+         C 252,280 252,180 256,120
+         C 260,180 260,280 256,344
+         Z"
+      fill="#C8A24D"/>
+  </g>
+</svg>

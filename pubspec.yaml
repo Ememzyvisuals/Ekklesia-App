@@ -122,6 +122,29 @@ dev_dependencies:
   # Back to a normal caret range — see the isar_community switch note in
   # dependencies above for why this no longer needs pinning.
   drift_dev: ^2.20.3
+  # App icon + splash screen generation. Both only ever run inside
+  # release.yml, right after that workflow's `flutter create .` step —
+  # this repo deliberately doesn't commit android/ios/ (see release.yml's
+  # comments), and both these tools write into native project folders
+  # that only exist ephemerally on the CI runner. Nothing to run from
+  # Termux; there's no native scaffolding on disk to write into locally.
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/ekklesia_icon_1024.png"
+  adaptive_icon_background: "#1F5E3B"
+  adaptive_icon_foreground: "assets/images/ekklesia_icon_foreground_1024.png"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#1F5E3B"
+  image: "assets/images/ekklesia_icon_foreground_1024.png"
+  android_12:
+    color: "#1F5E3B"
+    image: "assets/images/ekklesia_icon_foreground_1024.png"
 
 flutter:
   uses-material-design: true

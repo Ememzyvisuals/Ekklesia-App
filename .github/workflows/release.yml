@@ -46,6 +46,18 @@ jobs:
       - name: Generate platform folders
         run: flutter create . --platforms=android,ios --org com.ememzyvisuals --project-name ekklesia
 
+      # Both tools write straight into android/ios/, which only exist on
+      # this runner from the step above — nothing to commit back, nothing
+      # runnable from Termux (no native folders on disk there). Re-run
+      # every release build, from the same source PNGs each time, so the
+      # icon/splash config in pubspec.yaml stays the single source of
+      # truth rather than drifting from whatever got hand-generated once.
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
+
+      - name: Generate splash screen
+        run: dart run flutter_native_splash:create
+
       # Wires up real release signing from repository secrets, instead of
       # silently falling back to the debug keystore `flutter create`
       # ships by default (which builds fine but isn't installable-as-an-
