@@ -67,6 +67,52 @@ jobs:
       - name: Generate platform folders
         run: flutter create . --platforms=android,ios --org com.ememzyvisuals --project-name ekklesia
 
+      # flutter_local_notifications ^18.0.1 uses java.time APIs
+      # internally that require Android core library desugaring to be
+      # enabled — without this, assembleRelease fails outright at
+      # :app:checkReleaseAarMetadata before any of this app's own code
+      # is even touched, same category of problem as the
+      # flutter_inappwebview patch above: a real, direct dependency's
+      # own requirement, not a bug in this project's Dart code, and not
+      # something `dart fix`/`flutter analyze` can see since it's a
+      # native Android build concern. Reopening `android {}` and
+      # `dependencies {}` in the same script is legal in both Gradle
+      # DSLs — Gradle merges repeated blocks rather than erroring — so
+      # this appends cleanly regardless of what `flutter create`
+      # already generated inside those blocks.
+      - name: Enable core library desugaring (required by flutter_local_notifications)
+        run: |
+          path="android/app/build.gradle"
+          [ -f "$path" ] || path="android/app/build.gradle.kts"
+          if [[ "$path" == *.kts ]]; then
+            cat >> "$path" <<'EOF'
+
+android {
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+EOF
+          else
+            cat >> "$path" <<'EOF'
+
+android {
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+}
+EOF
+          fi
+          echo "Appended core library desugaring config to $path"
+
       # Both tools write straight into android/ios/, which only exist on
       # this runner from the step above — nothing to commit back, nothing
       # runnable from Termux (no native folders on disk there). Re-run
