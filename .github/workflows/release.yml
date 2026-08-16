@@ -67,6 +67,34 @@ jobs:
       - name: Generate platform folders
         run: flutter create . --platforms=android,ios --org com.ememzyvisuals --project-name ekklesia
 
+      # flutter_plugin_android_lifecycle (transitive, via file_picker —
+      # and possibly others) now requires compileSdk 36+; `flutter create`
+      # on this Flutter version still defaults lower, so
+      # :file_picker:checkReleaseAarMetadata fails before this app's own
+      # code is touched. Reopening `android {}` a second time and
+      # reassigning compileSdk is last-write-wins in both Gradle DSLs, so
+      # this simple override is enough — no need to touch targetSdk or
+      # minSdk, which affect runtime behavior and aren't what's broken
+      # here.
+      - name: Bump compileSdk for plugins requiring API 36+
+        run: |
+          path="android/app/build.gradle"
+          [ -f "$path" ] || path="android/app/build.gradle.kts"
+          if [[ "$path" == *.kts ]]; then
+            cat >> "$path" <<'EOF'
+          android {
+              compileSdk = 36
+          }
+          EOF
+          else
+            cat >> "$path" <<'EOF'
+          android {
+              compileSdkVersion 36
+          }
+          EOF
+          fi
+          echo "Set compileSdk 36 in $path"
+
       # flutter_local_notifications ^18.0.1 uses java.time APIs
       # internally that require Android core library desugaring to be
       # enabled — without this, assembleRelease fails outright at
