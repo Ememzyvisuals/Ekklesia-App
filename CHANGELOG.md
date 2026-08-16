@@ -8,6 +8,19 @@ real release build.
 
 ## Unreleased — this pass
 
+- **Impact Academy seeded with real content.** `assets/data/messages.json`
+  was an empty `[]`. Added 5 original teaching entries under the
+  `Impact Academy` category — Success with Integrity, Prevailing Stars,
+  Jesus Aglow, The All-Sufficient Jesus, Glorious Transformation Through
+  Christ — matched to Deeper Life Bible Church's real monthly Impact
+  Academy themes, but written as original Ekklesia content, not scraped
+  or claimed as verbatim DLBC transcripts (no clean transcript source
+  exists for that program; it's a live campus-fellowship series, not a
+  content archive).
+- **App icon + splash wired up.** `flutter_launcher_icons` +
+  `flutter_native_splash` added to `pubspec.yaml`, generation steps added
+  to `release.yml` right after `flutter create .` (the only point native
+  android/ios folders exist — this repo doesn't commit them).
 - **Offline game import (Games feature).** Users can now import their own
   packaged HTML5 game as a `.zip` (index.html + assets, optional
   `manifest.json`/`thumbnail.png`) via a picker on the Games screen —
