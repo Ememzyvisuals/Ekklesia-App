@@ -80,20 +80,26 @@ jobs:
         run: |
           path="android/app/build.gradle"
           [ -f "$path" ] || path="android/app/build.gradle.kts"
-          if [[ "$path" == *.kts ]]; then
-            cat >> "$path" <<'EOF'
-          android {
-              compileSdk = 36
-          }
-          EOF
+          # Appending a second `android { compileSdk = 36 }` block after
+          # `flutter create`'s own didn't stick — confirmed by testing:
+          # the build still reported compiled-against android-34 with
+          # that block present in the file. Editing the exact original
+          # line in place instead, so there is only ever one statement
+          # setting this value, with nothing else in the file that could
+          # be evaluated afterward and win.
+          sed -i \
+            -e 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' \
+            -e 's/compileSdk flutter\.compileSdkVersion/compileSdk 36/' \
+            -e 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 36/' \
+            -e 's/compileSdkVersion = flutter\.compileSdkVersion/compileSdkVersion = 36/' \
+            "$path"
+          if grep -q "compileSdk.*= *36\|compileSdk 36\|compileSdkVersion 36" "$path"; then
+            echo "compileSdk successfully set to 36 in $path"
           else
-            cat >> "$path" <<'EOF'
-          android {
-              compileSdkVersion 36
-          }
-          EOF
+            echo "::error::None of the expected compileSdk patterns matched in $path — inspect the generated file, flutter create's template may have changed."
+            grep -n "compileSdk" "$path" || echo "(no compileSdk line found at all)"
+            exit 1
           fi
-          echo "Set compileSdk 36 in $path"
 
       # flutter_local_notifications ^18.0.1 uses java.time APIs
       # internally that require Android core library desugaring to be
