@@ -86,30 +86,26 @@ jobs:
           [ -f "$path" ] || path="android/app/build.gradle.kts"
           if [[ "$path" == *.kts ]]; then
             cat >> "$path" <<'EOF'
-
-android {
-    compileOptions {
-        isCoreLibraryDesugaringEnabled = true
-    }
-}
-
-dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
-}
-EOF
+          android {
+              compileOptions {
+                  isCoreLibraryDesugaringEnabled = true
+              }
+          }
+          dependencies {
+              coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+          }
+          EOF
           else
             cat >> "$path" <<'EOF'
-
-android {
-    compileOptions {
-        coreLibraryDesugaringEnabled true
-    }
-}
-
-dependencies {
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
-}
-EOF
+          android {
+              compileOptions {
+                  coreLibraryDesugaringEnabled true
+              }
+          }
+          dependencies {
+              coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+          }
+          EOF
           fi
           echo "Appended core library desugaring config to $path"
 
