@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoLocalizations;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -204,11 +205,95 @@ class EkklesiaApp extends ConsumerWidget {
       locale: _localeFor(language),
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+        _FallbackMaterialLocalizationsDelegate(),
+        _FallbackCupertinoLocalizationsDelegate(),
+        _FallbackWidgetsLocalizationsDelegate(),
       ],
       supportedLocales: AppLocalizations.supportedLocales,
     );
   }
+}
+
+// Confirmed real, well-documented Flutter issue (not speculation — see
+// commit message / PR description for the sources): Yoruba, Igbo, and
+// Hausa are NOT among the ~80 languages Flutter's own
+// GlobalMaterialLocalizations/GlobalCupertinoLocalizations/
+// GlobalWidgetsLocalizations ship built-in translations for (see
+// kMaterialSupportedLanguages in the flutter_localizations package).
+// Forcing `locale:` directly to one of those unsupported codes — which
+// this app must do, since AppLocalizations.delegate (our own, custom
+// generated from lib/l10n/*.arb) DOES support them and needs the
+// correct locale to resolve the right translations — left Flutter's
+// framework-level delegates unable to resolve anything for that locale.
+// Confirmed on a real device: switching to Igbo, the app's own
+// translated text (verse, prayer, category labels) rendered correctly,
+// while the bottom navigation area — which leans on Material internals
+// like NavigationDestination's tooltips, which call
+// MaterialLocalizations.of(context) — collapsed into a blank area.
+//
+// Each delegate below: reports itself as "supported" for every locale
+// (so Localizations never rejects the locale outright), but actually
+// loads the real translations only for locales Flutter genuinely ships;
+// for anything else (yo/ha/ig/pcm), it loads English instead. This
+// means a few framework-level strings a person is unlikely to ever
+// closely read (default dialog button labels, some accessibility
+// tooltips) show in English for these four languages, which is a minor,
+// honest degradation — infinitely better than the previous outcome,
+// which was large sections of the app becoming unusable.
+class _FallbackMaterialLocalizationsDelegate
+    extends LocalizationsDelegate<MaterialLocalizations> {
+  const _FallbackMaterialLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<MaterialLocalizations> load(Locale locale) {
+    final effective = GlobalMaterialLocalizations.delegate.isSupported(locale)
+        ? locale
+        : const Locale('en');
+    return GlobalMaterialLocalizations.delegate.load(effective);
+  }
+
+  @override
+  bool shouldReload(_FallbackMaterialLocalizationsDelegate old) => false;
+}
+
+class _FallbackCupertinoLocalizationsDelegate
+    extends LocalizationsDelegate<CupertinoLocalizations> {
+  const _FallbackCupertinoLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<CupertinoLocalizations> load(Locale locale) {
+    final effective =
+        GlobalCupertinoLocalizations.delegate.isSupported(locale)
+            ? locale
+            : const Locale('en');
+    return GlobalCupertinoLocalizations.delegate.load(effective);
+  }
+
+  @override
+  bool shouldReload(_FallbackCupertinoLocalizationsDelegate old) => false;
+}
+
+class _FallbackWidgetsLocalizationsDelegate
+    extends LocalizationsDelegate<WidgetsLocalizations> {
+  const _FallbackWidgetsLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<WidgetsLocalizations> load(Locale locale) {
+    final effective = GlobalWidgetsLocalizations.delegate.isSupported(locale)
+        ? locale
+        : const Locale('en');
+    return GlobalWidgetsLocalizations.delegate.load(effective);
+  }
+
+  @override
+  bool shouldReload(_FallbackWidgetsLocalizationsDelegate old) => false;
 }
