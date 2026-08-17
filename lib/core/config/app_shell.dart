@@ -58,8 +58,7 @@ class AppShell extends StatelessWidget {
               NavigationDestination(
                   icon: Icon(Icons.menu_book), label: 'Bible'),
               NavigationDestination(
-                  icon: Icon(Icons.videogame_asset_outlined),
-                  label: 'Games'),
+                  icon: Icon(Icons.videogame_asset_outlined), label: 'Games'),
               NavigationDestination(icon: Icon(Icons.smart_toy), label: 'AI'),
               NavigationDestination(
                   icon: Icon(Icons.settings), label: 'Settings'),

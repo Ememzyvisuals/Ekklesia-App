@@ -3,7 +3,8 @@ import 'dart:math';
 import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../../features/bible/data/bible_repository.dart';
-import '../../features/bible/data/bible_providers.dart' show kAppLanguageToBibleCode;
+import '../../features/bible/data/bible_providers.dart'
+    show kAppLanguageToBibleCode;
 
 /// Today's verse — fully local (PROJECT_MIGRATION_AUDIT.md Phase 4: "make
 /// the workers actually run locally, not via a cloud round trip").

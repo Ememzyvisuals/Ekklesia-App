@@ -259,15 +259,15 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       // forever with the old unguarded flutter_tts call. This is that
       // same failure, now bounded and visible instead of an infinite
       // spinner.
-      setState(() => _error =
-          "Your device's voice engine did not respond. Try again, or "
-          'check that a text-to-speech engine is installed and enabled '
-          "in your phone's settings.");
+      setState(() =>
+          _error = "Your device's voice engine did not respond. Try again, or "
+              'check that a text-to-speech engine is installed and enabled '
+              "in your phone's settings.");
     } on TtsGenerationException catch (e) {
       setState(() => _error = _friendlyTtsError(e));
     } catch (e) {
-      setState(() =>
-          _error = 'Something went wrong generating audio. Try again.');
+      setState(
+          () => _error = 'Something went wrong generating audio. Try again.');
     } finally {
       setState(() {
         _loadingAudio = false;
@@ -705,8 +705,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   child: Center(
                     child: hasNextChapter
                         ? OutlinedButton.icon(
-                            onPressed: () =>
-                                _openChapter(book, chapter + 1),
+                            onPressed: () => _openChapter(book, chapter + 1),
                             icon: const Icon(Icons.arrow_forward_rounded,
                                 size: 18),
                             label: Text('${book.name} ${chapter + 1}'),
@@ -1117,8 +1116,7 @@ class _AutoImportingView extends ConsumerStatefulWidget {
   final String bibleLanguage;
 
   @override
-  ConsumerState<_AutoImportingView> createState() =>
-      _AutoImportingViewState();
+  ConsumerState<_AutoImportingView> createState() => _AutoImportingViewState();
 }
 
 class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
@@ -1142,8 +1140,8 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
       if (!mounted) {
         return;
       }
-      setState(() =>
-          _error = "Couldn't set up this Bible. Check your storage space "
+      setState(
+          () => _error = "Couldn't set up this Bible. Check your storage space "
               'and try again.');
     }
   }
