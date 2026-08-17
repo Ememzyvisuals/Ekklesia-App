@@ -34,9 +34,8 @@ class UserGroqKeyService {
     // Groq key is a normal, expected state (most users haven't set one
     // yet); it must never be allowed to block the app from opening.
     try {
-      final value = await _storage
-          .read(key: _key)
-          .timeout(const Duration(seconds: 3));
+      final value =
+          await _storage.read(key: _key).timeout(const Duration(seconds: 3));
       return (value == null || value.trim().isEmpty) ? null : value.trim();
     } catch (_) {
       return null;
