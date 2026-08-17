@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Ekklesia's visual identity per the master build spec: Forest Green,
 /// Stone, and Warm Gold — calm, peaceful, premium. Not the orange/green
@@ -45,11 +44,28 @@ class AppColors {
 /// not ad-hoc GoogleFonts.outfit() calls scattered per-widget. Weights only
 /// go 300-700 per the spec; sentence case is a content convention (enforced
 /// by review, not by this class) rather than a text-transform.
+///
+/// Uses the bundled `assets/fonts/Outfit-Variable.ttf` directly via a
+/// plain TextStyle(fontFamily: 'Outfit') rather than GoogleFonts.outfit(),
+/// which was the actual cause of every screenshot from a real device
+/// showing the system font instead of Outfit: GoogleFonts fetches the
+/// font file from Google's CDN over the network on first use and only
+/// falls back to the system font silently if that fetch fails — for an
+/// offline-first app, "the very first launch has no internet yet" isn't
+/// an edge case, it's close to the expected case. Bundling the real font
+/// file (pulled from google/fonts' own GitHub repo, same font, same
+/// license) means Outfit renders correctly from the first frame,
+/// online or not.
 class AppTypography {
   AppTypography._();
 
   static TextStyle _style(double size, FontWeight weight, {Color? color}) =>
-      GoogleFonts.outfit(fontSize: size, fontWeight: weight, color: color);
+      TextStyle(
+        fontFamily: 'Outfit',
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+      );
 
   static TextStyle displayLarge({Color? color}) =>
       _style(56, FontWeight.w700, color: color);

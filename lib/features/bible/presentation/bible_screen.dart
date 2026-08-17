@@ -9,6 +9,8 @@ import '../../../core/config/app_theme.dart';
 import '../../../core/services/tts_service.dart';
 import '../../../core/services/local_tts_engine.dart'
     show TtsModelNotReadyException;
+import '../../../core/services/system_tts_engine.dart'
+    show SystemTtsTimeoutException;
 import '../../../core/services/audio_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../bookmarks/presentation/bookmark_button.dart';
@@ -128,7 +130,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       final book = books.firstWhere(
         (b) => b.code == parsed.book.code,
         orElse: () => throw BibleReferenceException(
-          '${parsed.book.englishName} not found — is this language imported?',
+          '${parsed.book.englishName} not found. Is this language imported?',
         ),
       );
       await _openChapter(book, parsed.chapter);
@@ -251,10 +253,21 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     } on TtsLanguageUnavailableException {
       setState(() =>
           _error = 'No offline voice is available for this language yet.');
+    } on SystemTtsTimeoutException {
+      // See system_tts_engine.dart's doc comment: confirmed on a real
+      // device that hitting Listen on the English Bible could hang
+      // forever with the old unguarded flutter_tts call. This is that
+      // same failure, now bounded and visible instead of an infinite
+      // spinner.
+      setState(() => _error =
+          "Your device's voice engine did not respond. Try again, or "
+          'check that a text-to-speech engine is installed and enabled '
+          "in your phone's settings.");
     } on TtsGenerationException catch (e) {
       setState(() => _error = _friendlyTtsError(e));
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() =>
+          _error = 'Something went wrong generating audio. Try again.');
     } finally {
       setState(() {
         _loadingAudio = false;
@@ -308,7 +321,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       return;
     }
     final refText = '${_selectedBook?.name ?? ''} ${v.chapter}:${v.number}';
-    Clipboard.setData(ClipboardData(text: '$refText — ${v.content}'));
+    Clipboard.setData(ClipboardData(text: '$refText: ${v.content}'));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).bibleVerseCopied)),
     );
@@ -386,65 +399,12 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
             ),
             child: imported
                 ? _buildReader(bibleLanguage, key: const ValueKey('reader'))
-                : _buildImportGate(bibleLanguage, key: const ValueKey('gate')),
+                : _AutoImportingView(
+                    key: const ValueKey('importing'),
+                    bibleLanguage: bibleLanguage,
+                  ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildImportGate(String bibleLanguage, {Key? key}) {
-    final l10n = AppLocalizations.of(context);
-    return Center(
-      key: key,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.menu_book_outlined,
-                size: 48, color: AppColors.textSecondary),
-            const SizedBox(height: 16),
-            Text(
-              l10n.bibleImportPrompt(
-                  kBibleCodeLabel[bibleLanguage] ?? bibleLanguage),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(l10n.bibleImportHint, textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            Consumer(
-              builder: (context, ref, _) {
-                return ElevatedButton.icon(
-                  icon: const Icon(Icons.download_rounded),
-                  label: Text(l10n.bibleImportButton),
-                  onPressed: () async {
-                    final importer = ref.read(bibleImporterProvider);
-                    try {
-                      await importer.importLanguage(bibleLanguage);
-                      ref.invalidate(bibleImportStatusProvider(bibleLanguage));
-                      if (!context.mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.bibleImportSuccess)));
-                    } catch (e) {
-                      if (!context.mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content:
-                                Text('${l10n.bibleImportFailedPrefix}: $e')),
-                      );
-                    }
-                  },
-                );
-              },
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -612,41 +572,82 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     if (_selectedBook == null || _selectedChapter == null) {
       return const SizedBox.shrink();
     }
+    final book = _selectedBook!;
+    final chapter = _selectedChapter!;
+    final hasNextChapter = chapter < book.chapterCount;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Compact utility row — search/settings-style icon buttons
+        // instead of the old header eating a full text-label row; the
+        // book/chapter identity now lives in the big centered header
+        // below, matching how a real Bible app (see the reference
+        // screenshots) keeps chrome quiet and lets the chapter number
+        // itself be the visual anchor.
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Expanded(
-                child: Text(
-                  '${_selectedBook!.name} $_selectedChapter',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
               if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
                   EkklesiaLanguage.igbo)
-                ElevatedButton.icon(
+                IconButton(
                   onPressed: _loadingAudio ? null : _listenToChapter,
+                  tooltip: l10n.bibleListen,
                   icon: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 150),
                     child: _loadingAudio
                         ? const SizedBox(
                             key: ValueKey('spinner'),
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.volume_up_rounded,
+                        : const Icon(Icons.headphones_rounded,
                             key: ValueKey('icon')),
                   ),
-                  label: Text(_loadingAudio
-                      ? (_queueProgressLabel ?? l10n.bibleGenerating)
-                      : l10n.bibleListen),
                 ),
+            ],
+          ),
+        ),
+        if (_loadingAudio && _queueProgressLabel != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(_queueProgressLabel!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 12, color: AppTheme.textSecondary(context))),
+          ),
+        // The big centered header — small caps book name, then a huge
+        // chapter number as the actual visual anchor of the screen.
+        // This is the single biggest change from the old plain-text
+        // layout: a Bible reading screen should feel like a real book
+        // you're opening to a specific page, not a scrolling text log.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            children: [
+              Text(
+                book.name.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 2.2,
+                  color: AppTheme.textSecondary(context),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$chapter',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 64,
+                  fontWeight: FontWeight.w700,
+                  height: 1.0,
+                  color: AppTheme.textPrimary(context),
+                ),
+              ),
             ],
           ),
         ),
@@ -679,7 +680,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'AI-generated voice — may mispronounce words or names.',
+                      'AI-generated voice. May mispronounce words or names.',
                       style: TextStyle(
                           fontSize: 12, color: AppTheme.textSecondary(context)),
                     ),
@@ -691,13 +692,37 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         ),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _verses.length,
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            // +1 for the "next chapter" pill at the end — a real Bible
+            // app lets you keep reading forward without backing out to
+            // the chapter grid every time (see the reference
+            // screenshots' bottom "Job 32" pill).
+            itemCount: _verses.length + 1,
             itemBuilder: (context, i) {
+              if (i == _verses.length) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Center(
+                    child: hasNextChapter
+                        ? OutlinedButton.icon(
+                            onPressed: () =>
+                                _openChapter(book, chapter + 1),
+                            icon: const Icon(Icons.arrow_forward_rounded,
+                                size: 18),
+                            label: Text('${book.name} ${chapter + 1}'),
+                          )
+                        : Text(
+                            "That's the end of ${book.name}.",
+                            style: TextStyle(
+                                color: AppTheme.textSecondary(context)),
+                          ),
+                  ),
+                );
+              }
               final v = _verses[i];
               if (v.omitted) {
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Text(
                     '${v.number}. [${l10n.bibleNotIncluded}]',
                     style: const TextStyle(
@@ -712,18 +737,40 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   : Colors.transparent;
               return InkWell(
                 onLongPress: () => _showVerseActions(v),
+                borderRadius: BorderRadius.circular(6),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: double.infinity,
                   color: highlightColor,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   child: RichText(
                     text: TextSpan(
-                      style: DefaultTextStyle.of(context).style,
+                      // Serves the same "elegant reading" role as a
+                      // reference Bible app's serif body text — Outfit
+                      // is this app's one bundled font (see
+                      // app_theme.dart), used here at a larger size and
+                      // taller line-height than the rest of the UI
+                      // specifically for long-form reading comfort,
+                      // rather than introducing a second typeface.
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 17,
+                        height: 1.65,
+                        color: AppTheme.textPrimary(context),
+                      ),
                       children: [
+                        // Small, raised-by-size-contrast verse number —
+                        // reads as a superscript against the much larger
+                        // body text beside it, the same visual trick a
+                        // printed Bible uses, without needing manual
+                        // baseline offset hacks.
                         TextSpan(
                           text: '${v.number} ',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textSecondary(context),
+                          ),
                         ),
                         TextSpan(text: v.content ?? ''),
                         if (v.approximate)
@@ -880,7 +927,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-            '${l10n.bibleNote} — ${_selectedBook?.name ?? ''} ${v.chapter}:${v.number}'),
+            '${l10n.bibleNote}: ${_selectedBook?.name ?? ''} ${v.chapter}:${v.number}'),
         content: TextField(
           controller: controller,
           maxLines: 5,
@@ -1048,6 +1095,94 @@ class _ChapterGrid extends StatelessWidget {
           child: Text('$chapterNumber'),
         );
       },
+    );
+  }
+}
+
+/// Replaces the old manual "tap to import" gate. The Bible dataset for
+/// every language is already bundled inside the app itself
+/// (assets/bible/*.json, several MB each, shipped in the APK) — nothing
+/// downloads over a network here. "Importing" just means parsing that
+/// bundled JSON once and writing it into the local SQLite database,
+/// which only needs to happen the first time a given language is
+/// opened; after that it's instant on every future launch, same as it
+/// always was. There's no reason a person should have to notice or tap
+/// anything for a purely local, one-time setup step — this now runs
+/// automatically the moment a language without imported data is opened,
+/// with just a brief "setting up" spinner rather than a button asking
+/// permission to do something that was always going to happen anyway.
+class _AutoImportingView extends ConsumerStatefulWidget {
+  const _AutoImportingView({super.key, required this.bibleLanguage});
+
+  final String bibleLanguage;
+
+  @override
+  ConsumerState<_AutoImportingView> createState() =>
+      _AutoImportingViewState();
+}
+
+class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _runImport();
+  }
+
+  Future<void> _runImport() async {
+    final importer = ref.read(bibleImporterProvider);
+    try {
+      await importer.importLanguage(widget.bibleLanguage);
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(bibleImportStatusProvider(widget.bibleLanguage));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() =>
+          _error = "Couldn't set up this Bible. Check your storage space "
+              'and try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 40, color: AppColors.textSecondary),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: () {
+                  setState(() => _error = null);
+                  _runImport();
+                },
+                child: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Setting up your Bible'),
+        ],
+      ),
     );
   }
 }

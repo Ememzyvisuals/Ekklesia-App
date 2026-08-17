@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart';
@@ -8,11 +9,20 @@ import 'package:sherpa_onnx/sherpa_onnx.dart';
 import 'tts_model_registry.dart';
 
 /// Wraps sherpa-onnx's OfflineTts for the three on-device MMS languages
-/// (yo/ha/pcm — see AppConfig.mmsOnnxAvailableLanguages). Spec §45's
-/// ModelLifecycleManager: only one language's model is loaded into
-/// memory at a time, unloaded before the next one loads, so switching
-/// reading language doesn't accumulate multiple ONNX sessions in RAM —
-/// real concern on the low-end Android hardware this app targets.
+/// (yo/ha/pcm — see AppConfig.mmsOnnxAvailableLanguages).
+///
+/// Model load + generate + free all happen inside a spawned isolate per
+/// call (see [_generateInIsolate] below), not held across calls the way
+/// spec §45's ModelLifecycleManager originally described ("only one
+/// language's model loaded at a time, reused until switched") — that
+/// design assumed `generate()` was safe to call on the main isolate.
+/// It isn't: sherpa_onnx's `generate()` is a synchronous, CPU-bound FFI
+/// call that fully blocks whichever isolate calls it, including
+/// Flutter's own frame rendering — on a real device, hitting Listen
+/// visibly froze the entire app for the duration of synthesis, not just
+/// showed a spinner. Moving generation to its own isolate keeps the UI
+/// responsive at the cost of reloading the model fresh each call, which
+/// is the right trade on the low-end Android hardware this app targets.
 ///
 /// PROJECT_MIGRATION_AUDIT.md Phase 5. No cloud fallback anywhere in
 /// this class or its caller (tts_service.dart) — if a model isn't
@@ -28,48 +38,13 @@ import 'tts_model_registry.dart';
 /// across k2-fsa's own Flutter examples and this project's own Kaggle
 /// notebook's Python round-trip test — it has not been checked against
 /// a live pub.dev package listing or compiled, same caveat as every
-/// other on-device piece in this migration.
+/// other on-device piece in this migration. The UI-freeze problem this
+/// pass fixes is certain regardless (synchronous FFI always blocks its
+/// isolate); the isolate-offload fix itself is the one piece of
+/// today's changes most worth testing directly on a real device.
 class LocalTtsEngine {
   LocalTtsEngine._internal();
   static final LocalTtsEngine instance = LocalTtsEngine._internal();
-
-  String? _loadedLanguage;
-  OfflineTts? _tts;
-
-  /// Loads [mmsCode]'s model if not already the active one, unloading
-  /// whatever was loaded before. Throws [TtsModelNotReadyException] if
-  /// the model hasn't been downloaded yet (see [TtsModelRegistry]) —
-  /// callers should check status / prompt a download before calling
-  /// [synthesize], not rely on this to trigger one implicitly. Silent
-  /// auto-download here would mean generating audio could unexpectedly
-  /// start a multi-hundred-MB download on a metered connection.
-  Future<void> _ensureLoaded(String mmsCode) async {
-    if (_loadedLanguage == mmsCode && _tts != null) return;
-
-    final info = await TtsModelRegistry.instance.status(mmsCode);
-    if (!info.isReady ||
-        info.localModelPath == null ||
-        info.localTokensPath == null) {
-      throw TtsModelNotReadyException(mmsCode);
-    }
-
-    _tts?.free();
-    _tts = null;
-    _loadedLanguage = null;
-
-    _tts = OfflineTts(
-      OfflineTtsConfig(
-        model: OfflineTtsModelConfig(
-          vits: OfflineTtsVitsModelConfig(
-            model: info.localModelPath!,
-            tokens: info.localTokensPath!,
-          ),
-          numThreads: 2,
-        ),
-      ),
-    );
-    _loadedLanguage = mmsCode;
-  }
 
   /// Synthesizes [text] in [mmsCode] and writes the result to a WAV file
   /// under the app's cache directory, returning its path. Caller (
@@ -79,15 +54,17 @@ class LocalTtsEngine {
     required String text,
     required String mmsCode,
   }) async {
-    await _ensureLoaded(mmsCode);
-    final tts = _tts!;
-
-    // sid (speaker id) 0 -- these MMS checkpoints are single-speaker;
-    // speed 1.0 -- on-device voices don't need the speed-correction
-    // hack the old cloud YarnGPT engine required (see
-    // PROJECT_MIGRATION_AUDIT.md Phase 5 — AudioService's speedForSource
-    // no longer has a per-engine override at all, cloud or otherwise).
-    final audio = tts.generate(text: text, sid: 0, speed: 1.0);
+    // Confirms the model is downloaded and gets its file paths before
+    // handing off to the isolate — throws TtsModelNotReadyException
+    // here, on the main isolate, so that specific, expected failure
+    // reaches the UI the normal way rather than needing to cross an
+    // isolate boundary itself.
+    final info = await TtsModelRegistry.instance.status(mmsCode);
+    if (!info.isReady ||
+        info.localModelPath == null ||
+        info.localTokensPath == null) {
+      throw TtsModelNotReadyException(mmsCode);
+    }
 
     final cacheDir = await getTemporaryDirectory();
     final outDir = Directory(p.join(cacheDir.path, 'tts_output'));
@@ -97,22 +74,48 @@ class LocalTtsEngine {
       '${mmsCode}_${DateTime.now().microsecondsSinceEpoch}.wav',
     );
 
+    // `tts.generate(...)` is a synchronous, CPU-bound native (FFI) call
+    // — not just "might be slow," but genuinely blocking: while it runs,
+    // nothing else on this isolate executes at all, including Flutter's
+    // own frame rendering and touch handling, and including any
+    // `.timeout()` a caller might wrap around this — a Duration timer
+    // can't fire on an isolate whose event loop is itself blocked. For
+    // a full Bible chapter on real, low-end Android hardware, that's
+    // real seconds-to-tens-of-seconds of a fully frozen UI, which is
+    // indistinguishable from a hang to the person using it.
+    //
+    // Offloading via `compute()` runs this on a separate isolate, which
+    // is why the whole load+generate+write sequence is repeated here in
+    // a standalone top-level function instead of reusing the
+    // already-loaded `_tts` above: sherpa_onnx's OfflineTts wraps a
+    // native pointer, and native-resource objects generally can't be
+    // sent across an isolate boundary — only plain data (the paths and
+    // text below) can. The model gets loaded fresh inside the spawned
+    // isolate each call; slightly more work per synthesis, but correct,
+    // versus a UI that can't render or respond to touches for the
+    // duration.
+    //
+    // Confidence note: this hasn't been run against a real compiled
+    // build (sherpa_onnx's exact API surface here was already flagged
+    // by this file's own prior comments as unverified against a live
+    // package listing) — the UI-freeze problem itself is certain
+    // (synchronous FFI calls always block their isolate, that's not
+    // package-version-dependent), but this specific isolate-offload fix
+    // is lower-confidence than the rest of today's fixes and is the one
+    // most worth testing directly.
+    final samples = await compute(_generateInIsolate, _GenerateRequest(
+      modelPath: info.localModelPath!,
+      tokensPath: info.localTokensPath!,
+      text: text,
+    ));
+
     await _writeWav(
       path: outPath,
-      samples: audio.samples,
-      sampleRate: audio.sampleRate,
+      samples: samples.samples,
+      sampleRate: samples.sampleRate,
     );
 
     return outPath;
-  }
-
-  /// Releases the currently loaded model — call under memory pressure or
-  /// when TTS won't be needed for a while (spec §44's "unload models
-  /// when memory pressure requires it").
-  void unload() {
-    _tts?.free();
-    _tts = null;
-    _loadedLanguage = null;
   }
 
   /// Encodes 32-bit float PCM samples (sherpa-onnx's native output) as a
@@ -174,6 +177,59 @@ class TtsModelNotReadyException implements Exception {
   final String mmsCode;
   @override
   String toString() =>
-      'TtsModelNotReadyException: no downloaded model for "$mmsCode" — '
-      'prompt the user to download it first.';
+      'TtsModelNotReadyException: no downloaded model for "$mmsCode". '
+      'Prompt the user to download it first.';
+}
+
+/// Plain-data request for [_generateInIsolate] — every field must be
+/// isolate-transferable (no native pointers, no class instances holding
+/// FFI resources), which is exactly why this exists as its own type
+/// instead of passing an OfflineTts instance directly.
+class _GenerateRequest {
+  const _GenerateRequest({
+    required this.modelPath,
+    required this.tokensPath,
+    required this.text,
+  });
+  final String modelPath;
+  final String tokensPath;
+  final String text;
+}
+
+class _GenerateResult {
+  const _GenerateResult({required this.samples, required this.sampleRate});
+  final Float32List samples;
+  final int sampleRate;
+}
+
+/// Runs entirely on a spawned isolate via `compute()` — loads its own
+/// OfflineTts instance (can't reuse one created on the main isolate; see
+/// the confidence note on [LocalTtsEngine.synthesize] above), generates,
+/// and frees it before returning. Must be a top-level function (not a
+/// method or closure) — that's a `compute()` requirement, not a style
+/// choice.
+Future<_GenerateResult> _generateInIsolate(_GenerateRequest request) async {
+  final tts = OfflineTts(
+    OfflineTtsConfig(
+      model: OfflineTtsModelConfig(
+        vits: OfflineTtsVitsModelConfig(
+          model: request.modelPath,
+          tokens: request.tokensPath,
+        ),
+        numThreads: 2,
+      ),
+    ),
+  );
+  try {
+    // sid (speaker id) 0 -- these MMS checkpoints are single-speaker;
+    // speed 1.0 -- on-device voices don't need the speed-correction
+    // hack the old cloud YarnGPT engine required (see
+    // PROJECT_MIGRATION_AUDIT.md Phase 5 — AudioService's speedForSource
+    // no longer has a per-engine override at all, cloud or otherwise).
+    final audio = tts.generate(text: request.text, sid: 0, speed: 1.0);
+    return _GenerateResult(
+        samples: audio.samples, sampleRate: audio.sampleRate);
+  } finally {
+    tts.free();
+  }
 }

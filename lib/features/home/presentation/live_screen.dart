@@ -10,6 +10,7 @@ import '../../../core/config/app_config.dart';
 import '../../sermons/data/youtube_repository.dart';
 import '../../sermons/domain/video_entry.dart';
 import '../../sermons/presentation/sermon_library_screen.dart';
+import '../../sermons/data/youtube_worker.dart';
 
 /// Real radio streaming screen — plays DCLM's direct Icecast/Airtime
 /// mounts with proper lock-screen controls, plus shows the YouTube live
@@ -57,7 +58,20 @@ class _LiveScreenState extends State<LiveScreen> {
         setState(() => _isPlaying = true);
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      // Was `_error = e.toString()` — same raw-exception-in-the-UI
+      // problem as the AI Assistant screen; see that fix's comment for
+      // why this matters on a real, often-offline device.
+      final message = e.toString().toLowerCase();
+      if (message.contains('timeoutexception') ||
+          message.contains('socketexception') ||
+          message.contains('failed host lookup') ||
+          message.contains('network is unreachable')) {
+        setState(() => _error =
+            "You're offline. The radio needs an internet connection.");
+      } else {
+        setState(() =>
+            _error = "Couldn't start the stream. Try again in a moment.");
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -82,6 +96,13 @@ class _LiveScreenState extends State<LiveScreen> {
             builder: (context, snapshot) {
               final live = snapshot.data;
               if (live == null) {
+                // YoutubeWorker.lastError is the fix for a real, confirmed
+                // bug: this empty state used to show unconditionally even
+                // when the last sync had actually failed (bad API key,
+                // quota, no internet) — the failure was computed
+                // correctly but discarded, never reaching the UI at all.
+                // Now the real reason shows here if there is one.
+                final syncError = YoutubeWorker.lastError;
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -90,11 +111,17 @@ class _LiveScreenState extends State<LiveScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(CupertinoIcons.video_camera,
+                      Icon(
+                          syncError != null
+                              ? Icons.error_outline
+                              : CupertinoIcons.video_camera,
                           color: AppTheme.textSecondary(context)),
                       const SizedBox(width: 8),
-                      const Expanded(
-                          child: Text('No live YouTube stream right now.')),
+                      Expanded(
+                        child: Text(syncError != null
+                            ? "Couldn't check for a live stream: $syncError"
+                            : 'No live YouTube stream right now.'),
+                      ),
                     ],
                   ),
                 );
@@ -207,7 +234,7 @@ class _LiveScreenState extends State<LiveScreen> {
                   duration: const Duration(milliseconds: 220),
                   child: Text(
                     _isPlaying
-                        ? 'Now Playing — ${_label(_selectedLanguage)}'
+                        ? 'Now Playing: ${_label(_selectedLanguage)}'
                         : 'Tap to Play',
                     key: ValueKey(_isPlaying),
                     style: const TextStyle(
@@ -260,7 +287,7 @@ class _LiveScreenState extends State<LiveScreen> {
                                         color: Colors.white24, height: 1),
                                     const SizedBox(height: 12),
                                     Text(
-                                      '${info.title} — ${info.artist}',
+                                      '${info.title} · ${info.artist}',
                                       textAlign: TextAlign.center,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,

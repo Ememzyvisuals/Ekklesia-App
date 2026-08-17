@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import 'app_shell.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/home/presentation/live_screen.dart';
@@ -47,20 +48,61 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen()),
-    GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+
+    // The 5 primary tabs share one persistent bottom nav bar (AppShell)
+    // via StatefulShellRoute — see app_shell.dart's doc comment for why
+    // this replaced 5 independent top-level GoRoutes that had no shared
+    // navigation at all. Each branch keeps its own navigation stack
+    // (IndexedStack under the hood), so pushing a detail screen from,
+    // say, the Bible tab and switching to Settings and back preserves
+    // where you were in Bible.
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) =>
+          AppShell(navigationShell: navigationShell),
+      branches: [
+        StatefulShellBranch(routes: [
+          GoRoute(
+              path: '/home', builder: (context, state) => const HomeScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(
+              path: '/bible',
+              builder: (context, state) => const BibleScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(
+              path: '/games',
+              builder: (context, state) => const GamesScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(
+              path: '/ai',
+              builder: (context, state) => const AiAssistantScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(
+              path: '/settings',
+              builder: (context, state) => const SettingsScreen()),
+        ]),
+      ],
+    ),
+
+    // Everything below is a normal pushed route reached FROM inside a
+    // tab (e.g. tapping a category card on Home, or a message in
+    // Impact Academy) — Flutter's default Scaffold/AppBar already gives
+    // these a working back button since they're pushed onto the stack,
+    // not swapped in as a 6th tab.
     GoRoute(path: '/live', builder: (context, state) => const LiveScreen()),
-    GoRoute(path: '/bible', builder: (context, state) => const BibleScreen()),
     GoRoute(path: '/learn', builder: (context, state) => const LearnScreen()),
     GoRoute(
-        path: '/ai', builder: (context, state) => const AiAssistantScreen()),
-    GoRoute(
-        path: '/settings', builder: (context, state) => const SettingsScreen()),
-    GoRoute(path: '/games', builder: (context, state) => const GamesScreen()),
-    GoRoute(
-        path: '/profile', builder: (context, state) => const ProfileScreen()),
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen()),
     GoRoute(
         path: '/sermons',
-        builder: (context, state) => const SermonLibraryScreen()),
+        builder: (context, state) {
+          final category = state.extra is String ? state.extra as String : null;
+          return SermonLibraryScreen(initialCategory: category);
+        }),
     GoRoute(
         path: '/downloads',
         builder: (context, state) => const DownloadsScreen()),
@@ -73,3 +115,4 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
   ],
 );
+

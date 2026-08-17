@@ -129,7 +129,7 @@ class GameImportService {
         await targetDir.delete(recursive: true);
       }
       return Result.failure(AppFailure(
-        message: 'Could not import that game — the .zip may be corrupted '
+        message: 'Could not import that game. The .zip may be corrupted '
             'or not a valid game bundle.',
         debugDetail: e.toString(),
       ));

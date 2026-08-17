@@ -270,7 +270,7 @@ class _ProfilePage extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium,
               textAlign: TextAlign.center),
           const SizedBox(height: 8),
-          Text('No account needed — this stays on your device.',
+          Text('No account needed. This stays on your device.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary(context))),
           const SizedBox(height: 24),

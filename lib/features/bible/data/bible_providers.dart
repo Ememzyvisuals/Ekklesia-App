@@ -3,6 +3,7 @@ import 'package:isar_community/isar.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/isar_service.dart';
+import '../../../core/services/app_settings_service.dart' show languageProvider;
 import 'bible_annotations_repository.dart';
 import 'bible_audio_cache.dart';
 import 'bible_importer.dart';
@@ -57,10 +58,25 @@ const Map<String, String> kBibleCodeLabel = {
   'pcm': 'Nigerian Pidgin',
 };
 
-/// Which Bible language is currently selected for reading (independent of
-/// the app's UI language — a Hausa-UI user can still read the English
-/// Bible, and vice versa).
-final bibleLanguageProvider = StateProvider<String>((ref) => 'en');
+/// Which Bible language is currently selected for reading.
+///
+/// Previously totally independent of the app's UI language ("a Hausa-UI
+/// user can still read the English Bible" — a deliberate design choice
+/// at the time), but confirmed on a real device this meant changing the
+/// language in Settings did nothing to the Bible or the home screen's
+/// prayer at all — always English regardless. Reading this app's owner
+/// clearly wants one setting to control both: this now derives its
+/// default straight from [languageProvider], so switching language in
+/// Settings resets Bible reading to match. `ref.watch` inside a
+/// StateProvider's create callback means changing [languageProvider]
+/// re-runs this and resets the state — still overridable per-session via
+/// the Bible screen's own language dropdown (e.g. reading a different
+/// translation than your UI language, a real and common Bible-app use
+/// case) until [languageProvider] changes again.
+final bibleLanguageProvider = StateProvider<String>((ref) {
+  final appLanguage = ref.watch(languageProvider);
+  return kAppLanguageToBibleCode[appLanguage] ?? 'en';
+});
 
 /// Re-checked whenever [bibleLanguageProvider] changes or invalidated after
 /// an import completes.

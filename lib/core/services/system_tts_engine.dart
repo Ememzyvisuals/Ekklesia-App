@@ -1,19 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+/// Thrown when the device's own TTS engine never completes synthesis —
+/// see the timeout note on [SystemTtsEngine.synthesizeToFile] for why
+/// this is a real, confirmed failure mode, not a hypothetical one.
+class SystemTtsTimeoutException implements Exception {
+  const SystemTtsTimeoutException();
+  @override
+  String toString() =>
+      'SystemTtsTimeoutException: the device TTS engine did not respond.';
+}
+
 /// English narration uses the device's own TTS voice (spec §20 — "do not
 /// download an English neural model unnecessarily"), not a downloaded
 /// model, not cloud. PROJECT_MIGRATION_AUDIT.md Phase 5.
-///
-/// NOTE: `synthesizeToFile` is a real flutter_tts capability on Android/
-/// iOS in recent versions, used here so English output flows through the
-/// same file:// -> AudioService.play() path as the on-device MMS voices
-/// (see AudioService's file:// branch) instead of needing a second,
-/// engine-specific playback path. Not verified against a live package
-/// listing/compiled build — same caveat as sherpa_onnx's integration.
 class SystemTtsEngine {
   SystemTtsEngine._internal();
   static final SystemTtsEngine instance = SystemTtsEngine._internal();
@@ -31,6 +35,19 @@ class SystemTtsEngine {
   /// Synthesizes [text] to a local WAV file and returns its path — same
   /// output shape as [LocalTtsEngine.synthesize] so tts_service.dart can
   /// treat every engine uniformly.
+  ///
+  /// Confirmed on a real device: hitting "Listen" on the English Bible
+  /// hung indefinitely with no error, no timeout, no way out except
+  /// force-closing the app. Root cause — `synthesizeToFile`'s Future only
+  /// completes when the platform's native TTS engine fires a "synthesis
+  /// complete" callback, and that callback is well-documented across
+  /// flutter_tts issue trackers as simply never firing on a meaningful
+  /// number of Android OEM TTS engines (Samsung's bundled engine and
+  /// several older Google TTS versions among them) — the file, in some
+  /// cases, is actually written successfully; the app just never finds
+  /// out. A bounded timeout with a real error is infinitely better than
+  /// an unbounded hang: at worst it's a wrong-but-fast failure that lets
+  /// someone retry.
   Future<String> synthesizeToFile(String text) async {
     await _ensureConfigured();
 
@@ -39,15 +56,28 @@ class SystemTtsEngine {
     if (!await outDir.exists()) await outDir.create(recursive: true);
     final fileName = 'eng_${DateTime.now().microsecondsSinceEpoch}.wav';
 
-    // flutter_tts's synthesizeToFile takes a bare filename and writes into
-    // the platform's own app-storage directory (not an arbitrary path) on
-    // most versions — passing outDir explicitly where the platform
-    // channel supports it, falling back to the returned path otherwise.
-    // Confirm this against the installed flutter_tts version's actual
-    // signature before relying on the exact directory used.
-    await _flutterTts.synthesizeToFile(text, fileName);
+    try {
+      // Long text (a full chapter) genuinely takes real synthesis time
+      // even when working correctly — 45s gives real synthesis room
+      // without leaving a person staring at a spinner indefinitely on
+      // the actual failure case.
+      await _flutterTts
+          .synthesizeToFile(text, fileName)
+          .timeout(const Duration(seconds: 45));
+    } on TimeoutException {
+      throw const SystemTtsTimeoutException();
+    }
 
     final outPath = p.join(outDir.path, fileName);
+    final outFile = File(outPath);
+    if (!await outFile.exists() || await outFile.length() == 0) {
+      // The completion callback fired (so we got past the timeout) but
+      // no real audio file resulted — a different, but equally real,
+      // failure mode for the same underlying platform-channel
+      // unreliability. Same treatment: a clear error over silence.
+      throw const SystemTtsTimeoutException();
+    }
+
     return outPath;
   }
 }

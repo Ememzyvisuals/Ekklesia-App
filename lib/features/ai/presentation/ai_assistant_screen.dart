@@ -155,7 +155,32 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     } catch (e) {
       setState(() {
         _needsGroqKey = false;
-        _error = e.toString();
+        // Was `_error = e.toString()` — dumped raw exception text
+        // straight into the chat UI (e.g. "ClientException with
+        // SocketException: Failed host lookup: 'api.groq.com' (OS
+        // Error: No address associated with hostname, errno = 7)"),
+        // which is exactly what a person sees on a real device with no
+        // internet. A person doesn't need the OS errno; they need to
+        // know the AI needs a connection and their message wasn't
+        // lost.
+        final message = e.toString().toLowerCase();
+        if (message.contains('socketexception') ||
+            message.contains('failed host lookup') ||
+            message.contains('network is unreachable') ||
+            message.contains('connection refused') ||
+            message.contains('connection timed out')) {
+          _error = "You're offline. The AI Assistant needs an internet "
+              "connection. Try again once you're back online.";
+        } else if (message.contains('401') || message.contains('403')) {
+          _error = 'Your Groq API key was rejected. Check it in Settings.';
+        } else if (message.contains('429')) {
+          _error = "You've hit Groq's rate limit. Wait a moment and try "
+              'again.';
+        } else if (message.contains('timeoutexception')) {
+          _error = 'The request took too long. Try again.';
+        } else {
+          _error = 'Something went wrong sending that message. Try again.';
+        }
       });
     } finally {
       setState(() => _sending = false);

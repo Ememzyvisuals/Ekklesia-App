@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/config/app_theme.dart';
 import '../../../core/shared/result.dart';
 import '../data/youtube_repository.dart';
+import '../data/youtube_worker.dart';
 import '../domain/video_entry.dart';
 import 'video_player_screen.dart';
 
@@ -19,7 +20,13 @@ const List<String> _categories = [
 ];
 
 class SermonLibraryScreen extends StatefulWidget {
-  const SermonLibraryScreen({super.key});
+  const SermonLibraryScreen({super.key, this.initialCategory});
+
+  /// Jumps straight to this category's tab on open — used when arriving
+  /// from a Home category tile instead of the tab bar's own icon/route.
+  /// Must exactly match one of the entries in [_categories] above; falls
+  /// back to 'All' (index 0) if it doesn't.
+  final String? initialCategory;
 
   @override
   State<SermonLibraryScreen> createState() => _SermonLibraryScreenState();
@@ -34,7 +41,14 @@ class _SermonLibraryScreenState extends State<SermonLibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
+    final initialIndex = widget.initialCategory != null
+        ? _categories.indexOf(widget.initialCategory!)
+        : 0;
+    _tabController = TabController(
+      length: _categories.length,
+      vsync: this,
+      initialIndex: initialIndex >= 0 ? initialIndex : 0,
+    );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         _load();
@@ -95,16 +109,27 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Same fix as live_screen.dart's YouTube card: this screen's own
+    // Result only reflects the LOCAL cache read, which succeeds
+    // trivially even when it's empty because YoutubeWorker's background
+    // sync failed — that failure lived entirely separately and was
+    // previously discarded (see youtube_worker.dart). Confirmed on a
+    // real device: an invalid/misconfigured API key produced this exact
+    // generic empty state, with zero indication anything had actually
+    // gone wrong.
+    final syncError = YoutubeWorker.lastError;
     return ListView(
       padding: const EdgeInsets.all(32),
       children: [
         const SizedBox(height: 60),
-        Icon(Icons.church_outlined,
+        Icon(syncError != null ? Icons.error_outline : Icons.church_outlined,
             size: 48, color: AppTheme.textSecondary(context)),
         const SizedBox(height: 16),
         Center(
           child: Text(
-            'No messages here yet — pull down to check for new uploads.',
+            syncError != null
+                ? "Couldn't sync with YouTube: $syncError"
+                : 'No messages here yet. Pull down to check for new uploads.',
             textAlign: TextAlign.center,
             style: AppTypography.bodyMedium(
                 color: AppTheme.textSecondary(context)),

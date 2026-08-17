@@ -31,33 +31,52 @@ class PrayerWorker {
   Future<Map<String, dynamic>> getTodaysPrayer(
       {required String language}) async {
     final today = _todayKey();
+    // Cache key now includes language — without this, switching
+    // language mid-day would still serve whatever language generated
+    // the first cache hit that day, since only the date was ever
+    // checked before.
+    final cacheKey = '${_cacheKey}_$language';
     final prefs = await SharedPreferences.getInstance();
 
     if (prefs.getString(_cacheDateKey) == today) {
-      final cached = prefs.getString(_cacheKey);
+      final cached = prefs.getString(cacheKey);
       if (cached != null) {
         return {'text': cached, 'source': 'cache'};
       }
     }
 
-    return _generateAndCache(today, language, prefs);
+    return _generateAndCache(today, language, prefs, cacheKey);
   }
 
-  Future<Map<String, dynamic>> _generateAndCache(
-      String dateKey, String language, SharedPreferences prefs) async {
+  Future<Map<String, dynamic>> _generateAndCache(String dateKey,
+      String language, SharedPreferences prefs, String cacheKey) async {
     final reference = VerseWorker.instance.todaysReference();
+
+    // Was previously ignored entirely — `language` was accepted as a
+    // parameter but never referenced anywhere below, so the Groq prompt
+    // was always plain English text regardless of what was actually
+    // selected. Confirmed on a real device: switching to Yoruba/Hausa/
+    // Igbo/Pidgin still produced an English prayer every time.
+    final languageName = switch (language) {
+      'yoruba' => 'Yoruba',
+      'hausa' => 'Hausa',
+      'igbo' => 'Igbo',
+      'pidgin' => 'Nigerian Pidgin English',
+      _ => 'English',
+    };
 
     String text;
     String source;
     try {
       text = await GroqService.instance.chat([
-        const GroqMessage(
+        GroqMessage(
           role: 'system',
-          content: 'You write short, warm, biblically grounded daily prayers '
-              '(4-6 sentences) for a Christian devotional app. Base the '
-              'prayer thematically on the given verse reference without '
-              'quoting long passages of scripture. Plain text only, no '
-              'markdown, no preamble like "Here is a prayer".',
+          content: 'You write short, warm, biblically grounded daily '
+              'prayers (4-6 sentences) for a Christian devotional app. '
+              'Base the prayer thematically on the given verse reference '
+              'without quoting long passages of scripture. Write entirely '
+              'in $languageName. Plain text only, no markdown, no '
+              'preamble like "Here is a prayer".',
         ),
         GroqMessage(
             role: 'user',
@@ -69,14 +88,16 @@ class PrayerWorker {
       // was hit — falls back to a reference-aware canned prayer rather
       // than leaving the home screen's prayer card empty. This IS the
       // "app must remain useful without Groq" behavior spec §31 asks
-      // for, not an error state.
+      // for, not an error state. English-only fallback for now — a
+      // translated set of canned fallbacks per language is a real
+      // follow-up, not something to fabricate inline here.
       text = 'Lord, as we reflect on $reference today, help us live it out '
           'in how we treat others, and give us peace for whatever this day '
           'holds. Amen.';
       source = 'offline_fallback';
     }
 
-    await prefs.setString(_cacheKey, text);
+    await prefs.setString(cacheKey, text);
     await prefs.setString(_cacheDateKey, dateKey);
     return {'text': text, 'based_on_reference': reference, 'source': source};
   }

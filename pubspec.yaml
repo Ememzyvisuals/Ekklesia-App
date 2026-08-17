@@ -99,7 +99,6 @@ dependencies:
   # class (Drift generates its own row classes; the rest are plain Dart).
   # flutter_dotenv removed — see main.dart's note on why .env is gone
   # entirely, not just its content emptied.
-  google_fonts: ^6.2.1
   # connectivity_plus removed — its only caller was SyncWorker
   # (PROJECT_MIGRATION_AUDIT.md Phase 4: deleted as dead code, zero real
   # callers of its own queueWrite()). Nothing else in the app needs a
@@ -149,6 +148,10 @@ flutter_native_splash:
 flutter:
   uses-material-design: true
   generate: true
+  fonts:
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit-Variable.ttf
   assets:
     - assets/images/
     - assets/icons/

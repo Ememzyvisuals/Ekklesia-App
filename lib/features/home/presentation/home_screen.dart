@@ -14,11 +14,9 @@ import '../../../l10n/generated/app_localizations.dart';
 /// today's verse and prayer (VerseWorker/PrayerWorker), categories, and
 /// quick access to Bible, AI assistant, and settings.
 ///
-/// The category grid below is still a static placeholder wired for
-/// layout/navigation only — tapping a category doesn't yet filter
-/// sermon_library_screen's YouTube query by that category. Everything
-/// else on this screen (the featured card and daily content) is live
-/// data, not a placeholder.
+/// The category grid routes each tile into sermon_library_screen (or
+/// /learn for Impact Academy), filtered to that category — see
+/// _openCategory below.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -99,38 +97,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
               children: _categories
-                  .map((c) => _CategoryTile(label: c.$1, icon: c.$2))
+                  .map((c) => _CategoryTile(
+                        label: c.$1,
+                        icon: c.$2,
+                        onTap: () => _openCategory(context, c.$1),
+                      ))
                   .toList(),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/bible');
-              break;
-            case 2:
-              context.go('/ai');
-              break;
-            case 3:
-              context.go('/settings');
-              break;
-          }
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.menu_book), label: 'Bible'),
-          NavigationDestination(icon: Icon(Icons.smart_toy), label: 'AI'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
     );
+  }
+
+  /// Sunday Service / Bible Study / Global Crusade / Programs go to the
+  /// sermon library filtered to that category (YouTube-backed); Impact
+  /// Academy is a separate content source entirely (Drift/Groq-backed,
+  /// not YouTube) so it goes to /learn instead. This was previously
+  /// completely unwired — _CategoryTile had no onTap at all, confirmed
+  /// on a real device: every one of these 5 tiles did nothing when
+  /// tapped.
+  ///
+  /// "Global Crusade" (this tile's label) maps to sermon_library_screen's
+  /// 'GCK' category tab, not a tab literally named "Global Crusade" —
+  /// GCK is Deeper Life's own shorthand for "Global Crusade with
+  /// Kumuyi." Worth renaming one side or the other for consistency, but
+  /// out of scope for wiring the navigation itself.
+  void _openCategory(BuildContext context, String label) {
+    switch (label) {
+      case 'Impact Academy':
+        context.push('/learn');
+        return;
+      case 'Global Crusade':
+        context.push('/sermons', extra: 'GCK');
+        return;
+      default:
+        context.push('/sermons', extra: label);
+    }
   }
 }
 
@@ -285,26 +288,36 @@ class _DailyContentCard extends StatelessWidget {
 }
 
 class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.label, required this.icon});
+  const _CategoryTile(
+      {required this.label, required this.icon, required this.onTap});
 
   final String label;
   final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.accent, size: 32),
-          const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center),
-        ],
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border:
+                Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.accent, size: 32),
+              const SizedBox(height: 8),
+              Text(label, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
       ),
     );
   }
