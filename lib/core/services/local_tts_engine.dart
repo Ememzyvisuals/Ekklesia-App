@@ -103,11 +103,13 @@ class LocalTtsEngine {
     // package-version-dependent), but this specific isolate-offload fix
     // is lower-confidence than the rest of today's fixes and is the one
     // most worth testing directly.
-    final samples = await compute(_generateInIsolate, _GenerateRequest(
-      modelPath: info.localModelPath!,
-      tokensPath: info.localTokensPath!,
-      text: text,
-    ));
+    final samples = await compute(
+        _generateInIsolate,
+        _GenerateRequest(
+          modelPath: info.localModelPath!,
+          tokensPath: info.localTokensPath!,
+          text: text,
+        ));
 
     await _writeWav(
       path: outPath,

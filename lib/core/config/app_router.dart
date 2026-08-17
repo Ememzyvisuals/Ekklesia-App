@@ -66,13 +66,11 @@ final GoRouter appRouter = GoRouter(
         ]),
         StatefulShellBranch(routes: [
           GoRoute(
-              path: '/bible',
-              builder: (context, state) => const BibleScreen()),
+              path: '/bible', builder: (context, state) => const BibleScreen()),
         ]),
         StatefulShellBranch(routes: [
           GoRoute(
-              path: '/games',
-              builder: (context, state) => const GamesScreen()),
+              path: '/games', builder: (context, state) => const GamesScreen()),
         ]),
         StatefulShellBranch(routes: [
           GoRoute(
@@ -95,8 +93,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/live', builder: (context, state) => const LiveScreen()),
     GoRoute(path: '/learn', builder: (context, state) => const LearnScreen()),
     GoRoute(
-        path: '/profile',
-        builder: (context, state) => const ProfileScreen()),
+        path: '/profile', builder: (context, state) => const ProfileScreen()),
     GoRoute(
         path: '/sermons',
         builder: (context, state) {
@@ -115,4 +112,3 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
   ],
 );
-

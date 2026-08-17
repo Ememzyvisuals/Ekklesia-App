@@ -66,11 +66,11 @@ class _LiveScreenState extends State<LiveScreen> {
           message.contains('socketexception') ||
           message.contains('failed host lookup') ||
           message.contains('network is unreachable')) {
-        setState(() => _error =
-            "You're offline. The radio needs an internet connection.");
-      } else {
         setState(() =>
-            _error = "Couldn't start the stream. Try again in a moment.");
+            _error = "You're offline. The radio needs an internet connection.");
+      } else {
+        setState(
+            () => _error = "Couldn't start the stream. Try again in a moment.");
       }
     } finally {
       setState(() => _loading = false);
