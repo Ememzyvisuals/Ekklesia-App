@@ -16,6 +16,7 @@ import 'core/services/cleanup_worker.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/isar_service.dart';
 import 'features/sermons/data/youtube_worker.dart';
+import 'core/services/connectivity_monitor.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
 Future<void> main() async {
@@ -120,6 +121,14 @@ Future<void> main() async {
   // youtube_worker.dart's doc comment for why this isn't a true OS-level
   // background worker yet.
   YoutubeWorker().start();
+
+  // Starts the periodic raw-connectivity check that powers the small
+  // offline indicator (see connectivity_monitor.dart / offline_indicator
+  // .dart) — the singleton's constructor already starts its own timer,
+  // so this call just ensures it's constructed from app launch (and
+  // gets one immediate check right away) rather than waiting on
+  // whichever widget happens to reference it first.
+  ConnectivityMonitor.instance.checkNow();
 
   // Flushes any AI chat turns queued locally while offline, and starts
   // listening for connectivity to flush new ones as they're recorded via

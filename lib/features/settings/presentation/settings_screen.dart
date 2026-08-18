@@ -172,6 +172,13 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => context.push('/bookmarks'),
           ),
           ListTile(
+            leading: const Icon(Icons.network_check),
+            title: const Text('Network Diagnostics'),
+            subtitle: const Text('Test connectivity to each app service'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/network-diagnostics'),
+          ),
+          ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text(l10n.settingsCredits),
             subtitle: Text(l10n.settingsCreditsSubtitle),

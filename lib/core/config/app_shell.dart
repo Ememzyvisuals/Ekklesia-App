@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'radio_mini_player.dart';
+import 'offline_indicator.dart';
 
 /// The persistent bottom-nav shell for the app's 5 primary tabs — Home,
 /// Bible, Games, AI, Settings.
@@ -32,7 +33,15 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      body: Column(
+        children: [
+          // Only ever visible when genuinely offline — see
+          // offline_indicator.dart. Sits above all tab content so it's
+          // consistent no matter which tab is active.
+          const OfflineIndicator(),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
