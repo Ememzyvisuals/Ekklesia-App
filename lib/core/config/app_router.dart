@@ -75,7 +75,10 @@ final GoRouter appRouter = GoRouter(
         StatefulShellBranch(routes: [
           GoRoute(
               path: '/ai',
-              builder: (context, state) => const AiAssistantScreen()),
+              builder: (context, state) => AiAssistantScreen(
+                  initialMessage: state.extra is String
+                      ? state.extra as String
+                      : null)),
         ]),
         StatefulShellBranch(routes: [
           GoRoute(

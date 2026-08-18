@@ -112,7 +112,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               future: _prayerFuture,
               textBuilder: (data) => data['text'] as String? ?? '',
               maxLines: 3,
-              onTap: () => context.go('/ai'),
+              // Was a bare navigate — landed on a blank AI chat with the
+              // prayer nowhere to be seen, meaning: read the prayer,
+              // copy it manually, retype/paste it into the AI yourself.
+              // `_prayerFuture` is already resolved (or resolving) from
+              // initState, so awaiting it again here just reads the same
+              // cached value rather than generating a second prayer.
+              onTap: () async {
+                final data = await _prayerFuture;
+                final text = data['text'] as String?;
+                if (!context.mounted) return;
+                context.go('/ai', extra: text);
+              },
             ),
             const SizedBox(height: 24),
             Text(AppLocalizations.of(context).homeCategories,

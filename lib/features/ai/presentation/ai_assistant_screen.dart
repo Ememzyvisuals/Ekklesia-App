@@ -29,7 +29,13 @@ import '../../../core/widgets/ekklesia_companion.dart';
 /// that same day; history for today's session loads on screen init so a
 /// restart mid-day doesn't lose the conversation.
 class AiAssistantScreen extends StatefulWidget {
-  const AiAssistantScreen({super.key});
+  const AiAssistantScreen({super.key, this.initialMessage});
+
+  /// Set when arriving from Home's "Today's Prayer" card — that text
+  /// gets sent to the AI automatically on arrival, rather than landing
+  /// on a blank chat and leaving the person to copy/retype it
+  /// themselves.
+  final String? initialMessage;
 
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
@@ -106,6 +112,20 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         setState(() => _loadingHistory = false);
       }
     }
+    _maybeSendInitialMessage();
+  }
+
+  /// Auto-sends widget.initialMessage (the prayer text, when arriving
+  /// from Home) exactly once, and only into a genuinely empty chat —
+  /// if today's session already has messages, silently do nothing
+  /// rather than injecting the prayer into an existing conversation the
+  /// person is already having.
+  void _maybeSendInitialMessage() {
+    final message = widget.initialMessage;
+    if (message == null || message.trim().isEmpty || _history.isNotEmpty) {
+      return;
+    }
+    _sendSuggested(message);
   }
 
   Future<void> _persist(_ChatEntry entry) async {

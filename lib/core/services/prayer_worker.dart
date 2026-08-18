@@ -84,16 +84,21 @@ class PrayerWorker {
       ]);
       source = 'generated';
     } catch (_) {
-      // No Groq key configured, offline, or the shared proxy's daily cap
-      // was hit — falls back to a reference-aware canned prayer rather
-      // than leaving the home screen's prayer card empty. This IS the
-      // "app must remain useful without Groq" behavior spec §31 asks
-      // for, not an error state. English-only fallback for now — a
-      // translated set of canned fallbacks per language is a real
-      // follow-up, not something to fabricate inline here.
-      text = 'Lord, as we reflect on $reference today, help us live it out '
-          'in how we treat others, and give us peace for whatever this day '
-          'holds. Amen.';
+      // Was a single hardcoded English string, always — if Groq fails
+      // consistently for someone (no key set, shared proxy rate-limited,
+      // offline), this is the ONLY prayer text they would ever see, in
+      // any language, which is exactly "it's always the same thing"
+      // reported on a real device. Now: several templates per language,
+      // chosen deterministically from the date + language (so it's
+      // still one consistent prayer per day, not different every time
+      // the card is reopened, but no longer identical day after day),
+      // and actually translated rather than English-only regardless of
+      // the selected language. These are functional but simple
+      // translations — worth a native-speaker review pass, same caveat
+      // as the companion accessibility labels.
+      final templates = _fallbackTemplates[language] ?? _fallbackTemplates['english']!;
+      final index = (dateKey + language).hashCode.abs() % templates.length;
+      text = templates[index](reference);
       source = 'offline_fallback';
     }
 
@@ -108,4 +113,54 @@ class PrayerWorker {
         '${now.month.toString().padLeft(2, '0')}-'
         '${now.day.toString().padLeft(2, '0')}';
   }
+
+  /// Fallback-only prayer templates, several per language, picked
+  /// deterministically per day+language (see the catch block above) —
+  /// only ever used when Groq generation actually fails. When Groq
+  /// succeeds, the prayer is freshly generated every day regardless.
+  static final Map<String, List<String Function(String)>> _fallbackTemplates = {
+    'english': [
+      (ref) => 'Lord, as we reflect on $ref today, help us live it out in '
+          'how we treat others, and give us peace for whatever this day '
+          'holds. Amen.',
+      (ref) => 'Father, thank You for Your word in $ref. Give us the '
+          'strength to carry it into today, and a heart that stays open '
+          'to Your leading. Amen.',
+      (ref) => 'Lord, let $ref shape the way we think and act today. '
+          'Guard our hearts, steady our steps, and remind us that You are '
+          'near. Amen.',
+      (ref) => 'God, we bring today to You in light of $ref. Where we are '
+          'weary, renew us; where we are unsure, guide us. Amen.',
+    ],
+    'yoruba': [
+      (ref) => 'Oluwa, bi a se n ronu nipa $ref loni, ran wa lowo lati '
+          'gbe e ni ise, ki o si fun wa ni alafia fun ohunkohun ti ojo yi '
+          'mu wa. Amin.',
+      (ref) => 'Baba, a dupe fun ọrọ Rẹ ninu $ref. Fun wa ni agbara lati gbe '
+          'e loni, ati okan ti o si sile fun itọsọna Rẹ. Amin.',
+    ],
+    'hausa': [
+      (ref) => 'Ubangiji, yayin da muke tunani a kan $ref yau, ka taimake '
+          'mu mu rayu da shi, ka kuma ba mu salama don duk abin da wannan '
+          'rana ta kawo. Amin.',
+      (ref) => 'Uba, muna godiya don maganarka a cikin $ref. Ka ba mu karfi '
+          'mu dauke shi cikin yau, da zuciyar da ke bude ga jagorancinka. '
+          'Amin.',
+    ],
+    'igbo': [
+      (ref) => 'Onyenwe anyị, ka anyị na-atule $ref taa, nyere anyị aka '
+          'ibi ya na ndụ anyị, nyekwa anyị udo maka ihe ọ bụla ụbọchị a '
+          'na-eweta. Amen.',
+      (ref) => 'Nna, anyị na-ekele gị maka okwu gị dị na $ref. Nye anyị ike '
+          'iburu ya n\'ime taa, na obi meghere maka nduzi gị. Amen.',
+    ],
+    'pidgin': [
+      (ref) => 'Lord, as we dey think about $ref today, help us to live '
+          'am out for how we dey treat other people, and give us peace '
+          'for whatever this day carry. Amen.',
+      (ref) => 'Father, thank You for Your word for $ref. Give us strength '
+          'to carry am go today, and heart wey go dey open for Your '
+          'guidance. Amen.',
+    ],
+  };
 }
