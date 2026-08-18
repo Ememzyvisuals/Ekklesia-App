@@ -143,7 +143,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     curve: Curves.easeOut,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: color ?? AppColors.surface,
+                      color: color ?? AppTheme.surface(context),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                           color: AppColors.accent.withValues(alpha: 0.2)),

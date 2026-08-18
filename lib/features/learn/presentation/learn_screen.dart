@@ -136,7 +136,7 @@ class _MessageTileState extends State<_MessageTile> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppTheme.surface(context),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

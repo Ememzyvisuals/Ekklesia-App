@@ -363,10 +363,16 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
             child: DropdownButton<String>(
               value: bibleLanguage,
               borderRadius: BorderRadius.circular(12),
-              dropdownColor: AppColors.surface,
+              dropdownColor: AppTheme.surface(context),
               items: kBibleCodeLabel.entries
-                  .map((e) =>
-                      DropdownMenuItem(value: e.key, child: Text(e.value)))
+                  .map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(
+                          e.value,
+                          style:
+                              TextStyle(color: AppTheme.textPrimary(context)),
+                        ),
+                      ))
                   .toList(),
               onChanged: (code) {
                 if (code == null) {
@@ -726,7 +732,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   child: Text(
                     '${v.number}. [${l10n.bibleNotIncluded}]',
                     style: const TextStyle(
-                        color: AppColors.textSecondary,
+                        color: AppTheme.textSecondary(context),
                         fontStyle: FontStyle.italic),
                   ),
                 );
@@ -1157,7 +1163,7 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.error_outline,
-                  size: 40, color: AppColors.textSecondary),
+                  size: 40, color: AppTheme.textSecondary(context)),
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),

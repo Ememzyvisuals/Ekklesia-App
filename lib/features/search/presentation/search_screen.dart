@@ -265,7 +265,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: Text(
                       AppLocalizations.of(context).searchEmptyPrompt,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: AppTheme.textSecondary(context)),
                     ),
                   ),
                 )
@@ -273,7 +273,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ? Center(
                       child: Text(AppLocalizations.of(context).searchNoResults,
                           style:
-                              const TextStyle(color: AppColors.textSecondary)))
+                              TextStyle(color: AppTheme.textSecondary(context))))
                   : ListView.separated(
                       itemCount: _results.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),

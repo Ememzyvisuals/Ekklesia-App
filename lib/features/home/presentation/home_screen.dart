@@ -266,7 +266,7 @@ class _DailyContentCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppTheme.surface(context),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
@@ -283,8 +283,10 @@ class _DailyContentCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(label,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 13)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: AppTheme.textPrimary(context))),
                       const SizedBox(height: 4),
                       if (snapshot.connectionState == ConnectionState.waiting)
                         const SizedBox(
@@ -295,13 +297,14 @@ class _DailyContentCard extends StatelessWidget {
                       else if (snapshot.hasError || !snapshot.hasData)
                         Text(
                             AppLocalizations.of(context).homeUnavailableOffline,
-                            style:
-                                const TextStyle(color: AppColors.textSecondary))
+                            style: TextStyle(
+                                color: AppTheme.textSecondary(context)))
                       else
                         Text(
                           textBuilder(snapshot.data!),
                           maxLines: maxLines,
                           overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: AppTheme.textPrimary(context)),
                         ),
                     ],
                   ),
@@ -326,7 +329,7 @@ class _CategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
+      color: AppTheme.surface(context),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,

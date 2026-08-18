@@ -65,7 +65,7 @@ class NotificationsScreen extends StatelessWidget {
             return Center(
               child: Text(
                 AppLocalizations.of(context).notificationsEmpty,
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppTheme.textSecondary(context)),
               ),
             );
           }
@@ -77,7 +77,7 @@ class NotificationsScreen extends StatelessWidget {
               return ListTile(
                 leading: Icon(
                   _iconFor(n.category),
-                  color: n.read ? AppColors.textSecondary : AppColors.primary,
+                  color: n.read ? AppTheme.textSecondary(context) : AppColors.primary,
                 ),
                 title: Text(
                   n.title,
@@ -89,7 +89,7 @@ class NotificationsScreen extends StatelessWidget {
                 trailing: Text(
                   DateFormat('MMM d, h:mm a').format(n.createdAt),
                   style: const TextStyle(
-                      fontSize: 11, color: AppColors.textSecondary),
+                      fontSize: 11, color: AppTheme.textSecondary(context)),
                 ),
                 onTap: n.read
                     ? null

@@ -353,7 +353,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                           constraints: const BoxConstraints(maxWidth: 280),
                           decoration: BoxDecoration(
                             color:
-                                isUser ? AppColors.primary : AppColors.surface,
+                                isUser ? AppColors.primary : AppTheme.surface(context),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
@@ -364,7 +364,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                                 style: TextStyle(
                                     color: isUser
                                         ? Colors.white
-                                        : AppColors.textPrimary),
+                                        : AppTheme.textPrimary(context)),
                               ),
                               if (!isUser) ...[
                                 const SizedBox(height: 6),
@@ -585,7 +585,7 @@ class _SuggestionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
+      color: AppTheme.surface(context),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,

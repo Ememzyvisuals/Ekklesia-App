@@ -88,7 +88,7 @@ class BookmarksScreen extends ConsumerWidget {
                 child: Text(
                   AppLocalizations.of(context).bookmarksEmpty,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: AppTheme.textSecondary(context)),
                 ),
               ),
             );
@@ -109,7 +109,7 @@ class BookmarksScreen extends ConsumerWidget {
                 trailing: Text(
                   DateFormat('MMM d').format(item.createdAt),
                   style: const TextStyle(
-                      fontSize: 11, color: AppColors.textSecondary),
+                      fontSize: 11, color: AppTheme.textSecondary(context)),
                 ),
                 onTap: () => _open(context, item),
               );

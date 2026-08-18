@@ -108,7 +108,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       AppLocalizations.of(context)
                           .downloadsStorageUsed(_formatBytes(_storageBytes)),
                       style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 13),
+                          color: AppTheme.textSecondary(context), fontSize: 13),
                     ),
                   ),
                   if (_tasks.isEmpty)
@@ -120,7 +120,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                           AppLocalizations.of(context).downloadsEmpty,
                           textAlign: TextAlign.center,
                           style:
-                              const TextStyle(color: AppColors.textSecondary),
+                              TextStyle(color: AppTheme.textSecondary(context)),
                         ),
                       ),
                     )
@@ -149,11 +149,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         return const Icon(Icons.downloading, color: AppColors.primary);
       case DownloadStatus.paused:
         return const Icon(Icons.pause_circle_outline,
-            color: AppColors.textSecondary);
+            color: AppTheme.textSecondary(context));
       case DownloadStatus.failed:
         return const Icon(Icons.error_outline, color: Colors.red);
       case DownloadStatus.queued:
-        return const Icon(Icons.schedule, color: AppColors.textSecondary);
+        return const Icon(Icons.schedule, color: AppTheme.textSecondary(context));
     }
   }
 
