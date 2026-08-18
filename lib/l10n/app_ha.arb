@@ -96,5 +96,13 @@
   "settingsThemeDark": "Duhu",
   "settingsCredits": "Godiya",
   "settingsCreditsSubtitle": "Ba a gina ba tukuna — ana bukatarsa idan an yi amfani da kayan CC-BY",
-  "settingsGroqKeyRequired": "Ana buƙata don fasalulluka na AI — danna don ƙara maɓallinka"
+  "settingsGroqKeyRequired": "Ana buƙata don fasalulluka na AI — danna don ƙara maɓallinka",
+  "companionWelcomeSemantic": "Hoton maraba da Ekklesia",
+  "@companionWelcomeSemantic": null,
+  "companionBibleSemantic": "Hoton karatun Littafi Mai Tsarki na Ekklesia",
+  "@companionBibleSemantic": null,
+  "companionPrayerSemantic": "Hoton addu’a na Ekklesia",
+  "@companionPrayerSemantic": null,
+  "companionAiSemantic": "Hoton mataimakin AI na Ekklesia",
+  "@companionAiSemantic": null
 }

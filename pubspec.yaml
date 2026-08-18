@@ -133,17 +133,25 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/ekklesia_icon_1024.png"
-  adaptive_icon_background: "#1F5E3B"
-  adaptive_icon_foreground: "assets/images/ekklesia_icon_foreground_1024.png"
+  image_path: "assets/branding/ekklesia_logo_icon_source.png"
   min_sdk_android: 21
+  # No adaptive_icon_foreground/background here on purpose: the supplied
+  # logo (assets/branding/ekklesia_logo_icon_source.png) is a flattened
+  # illustration with its own rounded-square green backdrop already
+  # baked into the raster, not a separate transparent-background glyph
+  # a background color could sit behind. Extracting a clean foreground-
+  # only cutout from a flattened image risks visible artifacts around
+  # the edges — using image_path alone reproduces the supplied logo
+  # exactly as given (per "do not invent another logo") at the cost of
+  # Android 12+'s adaptive-icon shape masking/parallax effect, which is
+  # the right trade here: faithful over fancy.
 
 flutter_native_splash:
   color: "#1F5E3B"
-  image: "assets/images/ekklesia_icon_foreground_1024.png"
+  image: "assets/branding/ekklesia_logo.png"
   android_12:
     color: "#1F5E3B"
-    image: "assets/images/ekklesia_icon_foreground_1024.png"
+    image: "assets/branding/ekklesia_logo.png"
 
 flutter:
   uses-material-design: true
@@ -157,6 +165,8 @@ flutter:
     - assets/icons/
     - assets/audio/
     - assets/avatars/
+    - assets/characters/
+    - assets/branding/ekklesia_logo.png
     - assets/data/games.json
     - assets/data/programs.json
     - assets/data/messages.json

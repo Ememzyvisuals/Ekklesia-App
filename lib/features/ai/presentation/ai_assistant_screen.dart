@@ -16,6 +16,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/config/app_theme.dart';
 import '../data/conversation_repository.dart';
 import '../domain/conversation.dart';
+import '../../../core/widgets/ekklesia_companion.dart';
 
 /// AI Bible assistant — real Groq-backed chat, with a "Listen" action per
 /// assistant reply that routes to the correct TTS engine/persona via
@@ -119,6 +120,15 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       text: entry.text,
       createdAt: DateTime.now(),
     ));
+  }
+
+  /// Fills the input with a suggested prompt (from the empty-state
+  /// companion's suggestion chips) and sends it immediately — a tap
+  /// should feel like picking a ready-made message, not just
+  /// pre-filling the box for the person to press send themselves.
+  void _sendSuggested(String text) {
+    _inputController.text = text;
+    _send();
   }
 
   Future<void> _send() async {
@@ -325,7 +335,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
           Expanded(
             child: _loadingHistory
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
+                : _history.isEmpty
+                    ? _AiEmptyState(onSuggestionTap: _sendSuggested)
+                    : ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _history.length,
                     itemBuilder: (context, index) {
@@ -492,6 +504,103 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown only until the first message is sent — matches the explicit
+/// request: the AI companion sits here, with suggestion chips mirroring
+/// the supplied character art's own speech-bubble prompts ("Explain
+/// this verse" / "Help me pray" / "Give me a devotional"), and
+/// disappears the moment there's real conversation to show instead.
+class _AiEmptyState extends StatelessWidget {
+  const _AiEmptyState({required this.onSuggestionTap});
+
+  final ValueChanged<String> onSuggestionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EkklesiaCompanion(
+              type: EkklesiaCompanionType.ai,
+              width: 140,
+              animate: true,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'How can I help you today?',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary(context),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                _SuggestionChip(
+                  icon: Icons.menu_book_outlined,
+                  label: 'Explain this verse',
+                  onTap: () => onSuggestionTap(
+                      'Explain the meaning of John 3:16 in simple terms.'),
+                ),
+                _SuggestionChip(
+                  icon: Icons.volunteer_activism_outlined,
+                  label: 'Help me pray',
+                  onTap: () => onSuggestionTap(
+                      'Help me write a short prayer for peace and guidance today.'),
+                ),
+                _SuggestionChip(
+                  icon: Icons.chat_bubble_outline,
+                  label: 'Give me a devotional',
+                  onTap: () => onSuggestionTap(
+                      'Give me a short devotional to start my day.'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip(
+      {required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: AppColors.accent),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
       ),
     );
   }

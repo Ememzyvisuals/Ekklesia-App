@@ -96,5 +96,13 @@
   "settingsThemeDark": "Òkùnkùn",
   "settingsCredits": "Ìdúpẹ́",
   "settingsCreditsSubtitle": "Kò tíì kọ́ — a óò nílò rẹ̀ bí a bá lo àwọn ohun èlò CC-BY",
-  "settingsGroqKeyRequired": "A nílò rẹ̀ fún àwọn ẹ̀yà AI — tẹ̀ láti fi kọ́kọ́rọ́ rẹ sí"
+  "settingsGroqKeyRequired": "A nílò rẹ̀ fún àwọn ẹ̀yà AI — tẹ̀ láti fi kọ́kọ́rọ́ rẹ sí",
+  "companionWelcomeSemantic": "Àwòrán ìkíni Ekklesia",
+  "@companionWelcomeSemantic": null,
+  "companionBibleSemantic": "Àwòrán kíkàwé Bíbélì Ekklesia",
+  "@companionBibleSemantic": null,
+  "companionPrayerSemantic": "Àwòrán àdúrà Ekklesia",
+  "@companionPrayerSemantic": null,
+  "companionAiSemantic": "Àwòrán olùrànlọ́wọ́ AI ti Ekklesia",
+  "@companionAiSemantic": null
 }

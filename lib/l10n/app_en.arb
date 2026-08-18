@@ -113,5 +113,13 @@
   "settingsThemeDark": "Dark",
   "settingsCredits": "Credits",
   "settingsCreditsSubtitle": "Not built yet — needed if any CC-BY assets are used",
-  "settingsGroqKeyRequired": "Required for AI features — tap to add your key"
+  "settingsGroqKeyRequired": "Required for AI features — tap to add your key",
+  "companionWelcomeSemantic": "Ekklesia welcome companion illustration",
+  "@companionWelcomeSemantic": null,
+  "companionBibleSemantic": "Ekklesia Bible reading companion illustration",
+  "@companionBibleSemantic": null,
+  "companionPrayerSemantic": "Ekklesia prayer companion illustration",
+  "@companionPrayerSemantic": null,
+  "companionAiSemantic": "Ekklesia AI assistant companion illustration",
+  "@companionAiSemantic": null
 }

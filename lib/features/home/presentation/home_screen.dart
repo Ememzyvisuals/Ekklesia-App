@@ -9,6 +9,7 @@ import '../../../core/services/verse_worker.dart';
 import '../../../core/services/prayer_worker.dart';
 import '../../sermons/domain/video_entry.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../core/widgets/ekklesia_companion.dart';
 
 /// Landing screen — live/upcoming/recent program card (ProgramWorker),
 /// today's verse and prayer (VerseWorker/PrayerWorker), categories, and
@@ -63,6 +64,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Small, subtle greeting row — the one place the Welcome
+            // companion appears (spec: "Do NOT put a character on every
+            // screen," and this is the natural single spot for it).
+            // Deliberately compact: a small figure beside short text,
+            // not a hero banner competing with the actual dashboard
+            // content below it.
+            Row(
+              children: [
+                const EkklesiaCompanion(
+                  type: EkklesiaCompanionType.welcome,
+                  width: 56,
+                  isDecorative: true, // the greeting text says the same thing
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Welcome back',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             FutureBuilder<ProgramSnapshot>(
               future: _programFuture,
               builder: (context, snapshot) {

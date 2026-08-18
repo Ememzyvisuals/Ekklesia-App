@@ -7,6 +7,7 @@ import '../data/youtube_repository.dart';
 import '../data/youtube_worker.dart';
 import '../domain/video_entry.dart';
 import 'video_player_screen.dart';
+import '../../../core/widgets/ekklesia_companion.dart';
 
 const List<String> _categories = [
   'All',
@@ -121,10 +122,18 @@ class _EmptyState extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(32),
       children: [
-        const SizedBox(height: 60),
-        Icon(syncError != null ? Icons.error_outline : Icons.church_outlined,
-            size: 48, color: AppTheme.textSecondary(context)),
-        const SizedBox(height: 16),
+        const SizedBox(height: 40),
+        Center(
+          child: EkklesiaCompanion(
+            type: EkklesiaCompanionType.prayer,
+            width: 110,
+            // The error/empty text right below already conveys the
+            // state — this is here for warmth, not information, so a
+            // screen reader shouldn't announce it separately.
+            isDecorative: true,
+          ),
+        ),
+        const SizedBox(height: 12),
         Center(
           child: Text(
             syncError != null

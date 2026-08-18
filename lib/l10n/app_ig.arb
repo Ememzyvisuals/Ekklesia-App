@@ -96,5 +96,13 @@
   "settingsThemeDark": "Ọchịchịrị",
   "settingsCredits": "Ekele",
   "settingsCreditsSubtitle": "Emebeghị ya — ọ ga-adị mkpa ma ọ bụrụ na e ji ihe CC-BY",
-  "settingsGroqKeyRequired": "Achọrọ ya maka atụmatụ AI — pịa iji tinye igodo gị"
+  "settingsGroqKeyRequired": "Achọrọ ya maka atụmatụ AI — pịa iji tinye igodo gị",
+  "companionWelcomeSemantic": "Foto nnabata Ekklesia",
+  "@companionWelcomeSemantic": null,
+  "companionBibleSemantic": "Foto ọgụgụ Baịbụl Ekklesia",
+  "@companionBibleSemantic": null,
+  "companionPrayerSemantic": "Foto ekpere Ekklesia",
+  "@companionPrayerSemantic": null,
+  "companionAiSemantic": "Foto onye enyemaka AI Ekklesia",
+  "@companionAiSemantic": null
 }

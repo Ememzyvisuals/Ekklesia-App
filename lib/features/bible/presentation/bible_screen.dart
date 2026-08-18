@@ -21,6 +21,7 @@ import '../data/bible_providers.dart';
 import '../data/bible_repository.dart';
 import '../data/bible_tts_queue.dart';
 import 'voice_download_sheet.dart';
+import '../../../core/widgets/ekklesia_companion.dart';
 
 enum _View { books, chapters, verses }
 
@@ -1172,13 +1173,19 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
         ),
       );
     }
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Setting up your Bible'),
+          const EkklesiaCompanion(
+            type: EkklesiaCompanionType.bible,
+            width: 110,
+            isDecorative: true, // the text label below already says it
+          ),
+          const SizedBox(height: 8),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          const Text('Setting up your Bible'),
         ],
       ),
     );
