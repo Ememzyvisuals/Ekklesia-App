@@ -58,7 +58,12 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   // no shared daily quota anymore (every user brings their own Groq
   // key), so the only reason chat fails this way now is a missing key.
   bool _needsGroqKey = false;
-  late final String _sessionId;
+  // Was `late final` — one session per calendar day, fixed for the
+  // screen's lifetime. Needs to be mutable now: switching to a past
+  // conversation from the history drawer, or starting a fresh "New
+  // Chat", both reassign this to a different session.
+  String _sessionId = '';
+  bool _initialMessageHandled = false;
   final _random = Random();
 
   static const _systemPrompt = GroqMessage(
@@ -91,6 +96,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
 
   Future<void> _loadHistory() async {
+    setState(() {
+      _history.clear();
+      _loadingHistory = true;
+      _error = null;
+    });
     try {
       final messages = await ConversationRepository.instance
           .sessionMessages(_sessionId)
@@ -106,7 +116,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         _loadingHistory = false;
       });
     } catch (_) {
-      // Nothing cached yet for today's session — not fatal, just start
+      // Nothing cached yet for this session — not fatal, just start
       // with an empty history.
       if (mounted) {
         setState(() => _loadingHistory = false);
@@ -115,12 +125,39 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _maybeSendInitialMessage();
   }
 
+  /// Starts a brand-new, empty conversation with a fresh session id —
+  /// the "New Chat" action in the history drawer.
+  void _startNewChat() {
+    setState(() => _sessionId = _newSessionId());
+    _loadHistory();
+  }
+
+  /// Switches to viewing a past conversation from the history drawer.
+  void _switchToSession(String sessionId) {
+    if (sessionId == _sessionId) {
+      Navigator.of(context).pop(); // just close the drawer
+      return;
+    }
+    setState(() => _sessionId = sessionId);
+    _loadHistory();
+    Navigator.of(context).pop();
+  }
+
+  String _newSessionId() {
+    final now = DateTime.now();
+    return 'chat-${now.millisecondsSinceEpoch}-${_random.nextInt(99999)}';
+  }
+
   /// Auto-sends widget.initialMessage (the prayer text, when arriving
-  /// from Home) exactly once, and only into a genuinely empty chat —
-  /// if today's session already has messages, silently do nothing
-  /// rather than injecting the prayer into an existing conversation the
+  /// from Home) exactly once, ever — guarded separately from
+  /// _history.isEmpty so switching sessions later never re-triggers it,
+  /// and only into a genuinely empty chat — if today's session already
+  /// has messages, silently do nothing rather than injecting the prayer
+  /// into an existing conversation the
   /// person is already having.
   void _maybeSendInitialMessage() {
+    if (_initialMessageHandled) return;
+    _initialMessageHandled = true;
     final message = widget.initialMessage;
     if (message == null || message.trim().isEmpty || _history.isNotEmpty) {
       return;
@@ -323,6 +360,19 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Adding `drawer:` here is what actually gives the menu icon in
+      // the AppBar's leading (left) position — that's Scaffold's own
+      // built-in behavior, not something built by hand. Matches the
+      // explicit request for a menu on the left side that opens
+      // conversation history.
+      drawer: _ConversationHistoryDrawer(
+        currentSessionId: _sessionId,
+        onSelectSession: _switchToSession,
+        onNewChat: () {
+          Navigator.of(context).pop();
+          _startNewChat();
+        },
+      ),
       appBar: AppBar(
         title: Text(AppLocalizations.of(context).aiAssistantTitle),
         actions: [
@@ -620,6 +670,138 @@ class _SuggestionChip extends StatelessWidget {
               Text(label, style: const TextStyle(fontSize: 13)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One entry in the conversation history drawer — one row per session
+/// (not per message), showing that session's first user message as a
+/// preview and when it was last active.
+class _SessionSummary {
+  const _SessionSummary(
+      {required this.sessionId, required this.preview, required this.lastActive});
+  final String sessionId;
+  final String preview;
+  final DateTime lastActive;
+}
+
+class _ConversationHistoryDrawer extends StatelessWidget {
+  const _ConversationHistoryDrawer({
+    required this.currentSessionId,
+    required this.onSelectSession,
+    required this.onNewChat,
+  });
+
+  final String currentSessionId;
+  final ValueChanged<String> onSelectSession;
+  final VoidCallback onNewChat;
+
+  /// Groups the flat message list into one summary per session,
+  /// ordered by that session's most recent message — this is a local
+  /// Drift read (allMessages already exists for exactly this kind of
+  /// use), not a new query concept.
+  Future<List<_SessionSummary>> _loadSessions() async {
+    final messages = await ConversationRepository.instance.allMessages();
+    final bySession = <String, List<ConversationMessage>>{};
+    for (final m in messages) {
+      bySession.putIfAbsent(m.sessionId, () => []).add(m);
+    }
+    final summaries = bySession.entries.map((entry) {
+      final msgs = entry.value; // already newest-first from allMessages()
+      final firstUserMsg = msgs.lastWhere(
+        (m) => m.role == 'user',
+        orElse: () => msgs.last,
+      );
+      return _SessionSummary(
+        sessionId: entry.key,
+        preview: firstUserMsg.text,
+        lastActive: msgs.first.createdAt,
+      );
+    }).toList();
+    summaries.sort((a, b) => b.lastActive.compareTo(a.lastActive));
+    return summaries;
+  }
+
+  String _relativeDay(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(that).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return '$diff days ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Conversations',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary(context),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ElevatedButton.icon(
+                onPressed: onNewChat,
+                icon: const Icon(Icons.add),
+                label: const Text('New Chat'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: FutureBuilder<List<_SessionSummary>>(
+                future: _loadSessions(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final sessions = snapshot.data!;
+                  if (sessions.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No past conversations yet',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary(context)),
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    itemCount: sessions.length,
+                    itemBuilder: (context, i) {
+                      final s = sessions[i];
+                      final isCurrent = s.sessionId == currentSessionId;
+                      return ListTile(
+                        selected: isCurrent,
+                        leading: const Icon(Icons.chat_bubble_outline),
+                        title: Text(
+                          s.preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(_relativeDay(s.lastActive)),
+                        onTap: () => onSelectSession(s.sessionId),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
