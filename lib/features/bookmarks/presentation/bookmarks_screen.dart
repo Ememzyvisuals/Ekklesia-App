@@ -38,8 +38,12 @@ class BookmarksScreen extends ConsumerWidget {
   Future<void> _open(BuildContext context, BookmarkItem item) async {
     switch (item.type) {
       case BookmarkType.bible:
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const BibleScreen()));
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => BibleScreen(
+            initialReference: item.refId,
+            initialLanguage: item.language,
+          ),
+        ));
         break;
       case BookmarkType.sermon:
         final result = await YoutubeRepository().getCachedUploads();
@@ -56,7 +60,7 @@ class BookmarksScreen extends ConsumerWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text(
-                    'This sermon is no longer in the cache — it may have been removed.')),
+                    'This sermon is no longer in the cache. It may have been removed.')),
           );
         }
         break;
@@ -108,7 +112,7 @@ class BookmarksScreen extends ConsumerWidget {
                     : null,
                 trailing: Text(
                   DateFormat('MMM d').format(item.createdAt),
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11, color: AppTheme.textSecondary(context)),
                 ),
                 onTap: () => _open(context, item),

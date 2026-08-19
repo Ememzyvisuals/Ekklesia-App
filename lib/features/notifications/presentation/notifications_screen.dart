@@ -88,7 +88,7 @@ class NotificationsScreen extends StatelessWidget {
                 subtitle: Text(n.body),
                 trailing: Text(
                   DateFormat('MMM d, h:mm a').format(n.createdAt),
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11, color: AppTheme.textSecondary(context)),
                 ),
                 onTap: n.read

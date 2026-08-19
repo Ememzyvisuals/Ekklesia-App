@@ -5,11 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_theme.dart';
+import '../../../core/database/app_database.dart';
 import '../../../core/services/download_worker.dart';
 import '../../../core/shared/result.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../ai/data/conversation_repository.dart';
 import '../../bible/data/bible_providers.dart';
+import '../../bible/domain/bible_books.dart';
+import '../../bible/presentation/bible_screen.dart';
 import '../../bookmarks/data/bookmark_providers.dart';
 import '../../sermons/data/youtube_repository.dart';
 import '../../sermons/domain/video_entry.dart';
@@ -213,7 +216,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         context.push(result.payload as String);
         break;
       case _SearchSourceType.bible:
-        context.push('/bible');
+        final verse = result.payload as BibleVerse;
+        final book = kCanonicalBooksByCode[verse.bookCode];
+        final reference = book != null
+            ? '${book.englishName} ${verse.chapter}:${verse.number}'
+            : null;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => BibleScreen(
+            initialReference: reference,
+            initialLanguage: ref.read(bibleLanguageProvider),
+          ),
+        ));
         break;
     }
   }

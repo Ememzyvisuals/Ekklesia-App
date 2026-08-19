@@ -107,7 +107,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     child: Text(
                       AppLocalizations.of(context)
                           .downloadsStorageUsed(_formatBytes(_storageBytes)),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary(context), fontSize: 13),
                     ),
                   ),
@@ -148,12 +148,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       case DownloadStatus.downloading:
         return const Icon(Icons.downloading, color: AppColors.primary);
       case DownloadStatus.paused:
-        return const Icon(Icons.pause_circle_outline,
+        return Icon(Icons.pause_circle_outline,
             color: AppTheme.textSecondary(context));
       case DownloadStatus.failed:
         return const Icon(Icons.error_outline, color: Colors.red);
       case DownloadStatus.queued:
-        return const Icon(Icons.schedule, color: AppTheme.textSecondary(context));
+        return Icon(Icons.schedule, color: AppTheme.textSecondary(context));
     }
   }
 

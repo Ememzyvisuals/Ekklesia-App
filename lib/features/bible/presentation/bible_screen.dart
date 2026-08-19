@@ -42,7 +42,20 @@ enum _View { books, chapters, verses }
 /// etc. — Bible audio cache reconciliation is folded into the existing
 /// CleanupWorker instead, see its doc comment).
 class BibleScreen extends ConsumerStatefulWidget {
-  const BibleScreen({super.key});
+  const BibleScreen({super.key, this.initialReference, this.initialLanguage});
+
+  /// Set when arriving from a search result or bookmark tap — jumps
+  /// straight to that reference's chapter and, if it includes a verse
+  /// number (e.g. "John 3:16" vs. just "Genesis 1"), scrolls to and
+  /// blinks that specific verse. Was previously ignored entirely: both
+  /// search and bookmarks just opened a bare BibleScreen with no
+  /// reference at all, landing on whatever was last read (or Genesis 1)
+  /// regardless of what was actually tapped.
+  final String? initialReference;
+
+  /// Overrides the Bible language for this one open — used by bookmarks,
+  /// which remember which language a reference was bookmarked in.
+  final String? initialLanguage;
 
   @override
   ConsumerState<BibleScreen> createState() => _BibleScreenState();
@@ -64,6 +77,14 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   String? _queueProgressLabel;
   Map<int, Highlight> _highlights = {};
 
+  // Verse-jump-and-blink support: one GlobalKey per rendered verse (so
+  // Scrollable.ensureVisible can find it), which verse is currently
+  // blinking, and whether the blink is in its "on" phase right now.
+  final Map<int, GlobalKey> _verseKeys = {};
+  int? _blinkVerseNumber;
+  bool _blinkVisible = false;
+  Timer? _blinkTimer;
+
   // Named swatches, not emoji — every one of these renders as a plain
   // solid-color circle (see _showVerseActions), never a pictograph.
   static const Map<String, Color> _highlightPalette = {
@@ -81,6 +102,12 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     setState(() {
       _loadingVerses = true;
       _error = null;
+      // GlobalKeys are per-verse-number, and verse numbers reset every
+      // chapter (chapter 2 also has a "verse 5") — stale keys pointing
+      // at the previous chapter's now-unmounted widgets would make
+      // Scrollable.ensureVisible fail silently or scroll to the wrong
+      // place.
+      _verseKeys.clear();
     });
     try {
       final repo = ref.read(bibleRepositoryProvider);
@@ -135,12 +162,65 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         ),
       );
       await _openChapter(book, parsed.chapter);
+      // Only chapter-and-verse references (e.g. "John 3:16") get the
+      // scroll+blink treatment — a bare chapter reference ("Genesis 1")
+      // has no specific verse to point at, so just landing on the
+      // chapter itself (already done by _openChapter above) is correct.
+      if (parsed.startVerse != null && mounted) {
+        _scrollToAndBlinkVerse(parsed.startVerse!);
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
         _loadingVerses = false;
       });
     }
+  }
+
+  /// Scrolls the verse list to [verseNumber] and blinks it 3 times —
+  /// the explicit request: "there should be a highlight that will be
+  /// blinking... to show me this is where you have referred to."
+  /// Waits a frame after the verse list itself renders (GlobalKeys
+  /// aren't attached to a RenderObject until then) before scrolling.
+  void _scrollToAndBlinkVerse(int verseNumber) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final key = _verseKeys[verseNumber];
+      final targetContext = key?.currentContext;
+      if (targetContext != null) {
+        await Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          alignment: 0.3, // lands roughly a third down the screen, not glued to the very top
+        );
+      }
+      if (!mounted) return;
+
+      _blinkTimer?.cancel();
+      setState(() {
+        _blinkVerseNumber = verseNumber;
+        _blinkVisible = true;
+      });
+      var toggleCount = 0;
+      const totalToggles = 6; // 3 full on/off blinks
+      _blinkTimer =
+          Timer.periodic(const Duration(milliseconds: 350), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        toggleCount++;
+        if (toggleCount >= totalToggles) {
+          timer.cancel();
+          setState(() {
+            _blinkVerseNumber = null;
+            _blinkVisible = false;
+          });
+          return;
+        }
+        setState(() => _blinkVisible = !_blinkVisible);
+      });
+    });
   }
 
   Future<void> _runSearch(String query) async {
@@ -329,8 +409,32 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialLanguage != null) {
+      // Set once here, before the first frame — bibleLanguageProvider is
+      // a StateProvider, safe to write in initState via ref.read (not
+      // ref.watch, which initState can't use).
+      Future.microtask(() {
+        if (mounted) {
+          ref.read(bibleLanguageProvider.notifier).state =
+              widget.initialLanguage!;
+        }
+      });
+    }
+    if (widget.initialReference != null &&
+        widget.initialReference!.trim().isNotEmpty) {
+      _referenceController.text = widget.initialReference!;
+      // Runs after the first frame so bibleLanguageProvider (possibly
+      // just set above) and the book list are ready.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToReference());
+    }
+  }
+
+  @override
   void dispose() {
     _queueProgressSub?.cancel();
+    _blinkTimer?.cancel();
     _referenceController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -731,17 +835,24 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Text(
                     '${v.number}. [${l10n.bibleNotIncluded}]',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary(context),
                         fontStyle: FontStyle.italic),
                   ),
                 );
               }
-              final highlightColor = _highlights[v.number] != null
-                  ? _colorFromHex(_highlights[v.number]!.colorHex)
-                      .withValues(alpha: 0.35)
-                  : Colors.transparent;
+              final isBlinking =
+                  _blinkVerseNumber == v.number && _blinkVisible;
+              final highlightColor = isBlinking
+                  ? AppColors.accent.withValues(alpha: 0.55)
+                  : _highlights[v.number] != null
+                      ? _colorFromHex(_highlights[v.number]!.colorHex)
+                          .withValues(alpha: 0.35)
+                      : Colors.transparent;
+              final verseKey =
+                  _verseKeys.putIfAbsent(v.number, () => GlobalKey());
               return InkWell(
+                key: verseKey,
                 onLongPress: () => _showVerseActions(v),
                 borderRadius: BorderRadius.circular(6),
                 child: AnimatedContainer(
@@ -1162,7 +1273,7 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline,
+              Icon(Icons.error_outline,
                   size: 40, color: AppTheme.textSecondary(context)),
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
