@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart'
     hide PlayerState;
@@ -86,7 +87,21 @@ class _LiveScreenState extends State<LiveScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Live')),
+      appBar: AppBar(
+        title: const Text('Live'),
+        // Explicit "back to Home" — this screen can be reached from
+        // any tab (the radio mini-player's tap target works from
+        // anywhere, see radio_mini_player.dart), so a plain back arrow
+        // relying on Navigator.pop() would land wherever the person
+        // happened to be, not necessarily Home. context.go (not push)
+        // guarantees landing on Home specifically, matching the
+        // explicit request.
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to Home',
+          onPressed: () => context.go('/home'),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

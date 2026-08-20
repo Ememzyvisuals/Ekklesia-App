@@ -49,15 +49,43 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
     }
   }
 
+  Future<void> _handleBack() async {
+    // Many HTML5 games capture their own in-page navigation history —
+    // without this check, the system back gesture/button can step
+    // backward through the GAME's own pages first (or do nothing at
+    // all if the game's own JS swallows the event) instead of actually
+    // leaving the screen, which is exactly "no way back to Games" as
+    // reported. Only pop the Flutter route once the WebView itself has
+    // nowhere left to go back to.
+    if (await _controller.canGoBack()) {
+      await _controller.goBack();
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_loading) const Center(child: CircularProgressIndicator()),
-        ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back to Games',
+            onPressed: _handleBack,
+          ),
+        ),
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_loading) const Center(child: CircularProgressIndicator()),
+          ],
+        ),
       ),
     );
   }
