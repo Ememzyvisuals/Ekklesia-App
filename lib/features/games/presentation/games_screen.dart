@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_theme.dart';
 import '../../../core/shared/result.dart';
 import '../data/games_repository.dart';
 import '../data/local_games_repository.dart';
+import '../data/user_added_games_repository.dart';
 import '../data/game_import_service.dart';
 import '../domain/game_entry.dart';
 import 'game_webview_screen.dart';
@@ -47,15 +49,18 @@ class _GamesScreenState extends State<GamesScreen> {
     setState(() => _result = const Result.loading());
     final bundledResult = await _repository.fetchCatalog();
     final localGames = await LocalGamesRepository.instance.getAll();
+    final userAddedGames = await UserAddedGamesRepository.instance.getAll();
     if (!mounted) return;
     switch (bundledResult) {
       case ResultSuccess(data: final bundled):
-        setState(() => _result = Result.success([...localGames, ...bundled]));
+        setState(() => _result = Result.success(
+            [...localGames, ...userAddedGames, ...bundled]));
       case ResultFailure():
-        // Bundled catalog failed to load (shouldn't normally happen — it's
-        // a bundled asset) — still show whatever local games exist rather
-        // than blocking the whole screen on an unrelated failure.
-        setState(() => _result = Result.success(localGames));
+        // Bundled catalog failed to load (shouldn't normally happen, it's
+        // a bundled asset) — still show whatever local/added games exist
+        // instead of blocking the whole screen on an unrelated failure.
+        setState(() =>
+            _result = Result.success([...localGames, ...userAddedGames]));
       case ResultLoading():
         break;
     }
@@ -113,7 +118,9 @@ class _GamesScreenState extends State<GamesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove game?'),
-        content: Text('"${game.title}" will be removed from this device.'),
+        content: Text(game.isUserAdded
+            ? '"${game.title}" will be removed from your list.'
+            : '"${game.title}" will be removed from this device.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -125,7 +132,11 @@ class _GamesScreenState extends State<GamesScreen> {
       ),
     );
     if (confirmed != true) return;
-    await GameImportService.instance.deleteImportedGame(game);
+    if (game.isUserAdded) {
+      await UserAddedGamesRepository.instance.delete(game.id);
+    } else {
+      await GameImportService.instance.deleteImportedGame(game);
+    }
     _load();
   }
 
@@ -135,32 +146,177 @@ class _GamesScreenState extends State<GamesScreen> {
       appBar: AppBar(
         title: const Text('Games'),
         actions: [
-          IconButton(
+          PopupMenuButton<String>(
             icon: _importing
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.add_to_photos_outlined),
-            tooltip: 'Import a game (.zip)',
-            onPressed: _importing ? null : _importGame,
+                : const Icon(Icons.add),
+            tooltip: 'Add a game',
+            onSelected: (value) {
+              if (value == 'zip') _importGame();
+              if (value == 'url') _showAddByUrlDialog();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'zip',
+                child: ListTile(
+                  leading: Icon(Icons.add_to_photos_outlined),
+                  title: Text('Import a game (.zip)'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'url',
+                child: ListTile(
+                  leading: Icon(Icons.link),
+                  title: Text('Add game by link'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: switch (_result) {
-          ResultLoading() => const Center(child: CircularProgressIndicator()),
-          ResultFailure(failure: final f) =>
-            _ErrorState(message: f.message, onRetry: _load),
-          ResultSuccess(data: final games) => games.isEmpty
-              ? _EmptyState(onImport: _importGame)
-              : _GameGrid(
-                  games: games,
-                  onTap: _openGame,
-                  onLongPressLocal: _deleteLocalGame,
+        child: ListView(
+          children: [
+            // Bible Quiz is a native Flutter mini-game built directly
+            // into the app (bible_quiz_game_screen.dart) — not
+            // imported, not a URL, always available offline. Shown
+            // here as a permanent featured card above the
+            // imported/catalog/link games grid below, and also
+            // reachable from Home's category grid.
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: _BibleQuizCard(
+                  onTap: () => context.push('/bible-quiz')),
+            ),
+            switch (_result) {
+              ResultLoading() => const Padding(
+                  padding: EdgeInsets.only(top: 40),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-        },
+              ResultFailure(failure: final f) =>
+                _ErrorState(message: f.message, onRetry: _load),
+              ResultSuccess(data: final games) => games.isEmpty
+                  ? _EmptyState(onImport: _importGame)
+                  : _GameGrid(
+                      games: games,
+                      onTap: _openGame,
+                      onLongPressLocal: _deleteLocalGame,
+                    ),
+            },
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAddByUrlDialog() async {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add game by link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                  labelText: 'Game URL',
+                  hintText: 'https://example.com/game'),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This game loads directly from that link and needs '
+              'internet to play, unlike an imported .zip game.',
+              style: TextStyle(
+                  fontSize: 12, color: AppTheme.textSecondary(ctx)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Add')),
+        ],
+      ),
+    );
+    if (result != true) return;
+    final title = titleController.text.trim();
+    final rawUrl = urlController.text.trim();
+    final uri = Uri.tryParse(rawUrl);
+    if (title.isEmpty ||
+        uri == null ||
+        !(uri.isScheme('http') || uri.isScheme('https'))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Enter a name and a valid http/https link.')));
+      }
+      return;
+    }
+    await UserAddedGamesRepository.instance.insert(title: title, url: rawUrl);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Added "$title"')));
+      _load();
+    }
+  }
+}
+
+class _BibleQuizCard extends StatelessWidget {
+  const _BibleQuizCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(Icons.quiz, color: Colors.white, size: 32),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Bible Quiz',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16)),
+                    SizedBox(height: 2),
+                    Text('Fill in the verse. Test your knowledge.',
+                        style: TextStyle(
+                            color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -191,7 +347,7 @@ class _EmptyState extends StatelessWidget {
         Center(
           child: Text(
             'Online games are only added where the developer has granted '
-            'permission to link or embed — nothing scraped. Or import your '
+            'permission to link or embed. Nothing scraped. Or import your '
             'own packaged HTML5 game (.zip with an index.html) to play it '
             'fully offline.',
             textAlign: TextAlign.center,
@@ -260,10 +416,13 @@ class _GameGrid extends StatelessWidget {
         final game = games[i];
         return GestureDetector(
           onTap: () => onTap(game),
-          // Local (imported) games can be removed; bundled catalog
-          // entries can't — there's nothing on-device to delete for
-          // those, only a JSON row shipped in the app itself.
-          onLongPress: game.isLocal ? () => onLongPressLocal(game) : null,
+          // Local (imported) and user-added-by-link games can be
+          // removed; bundled catalog entries can't — there's nothing
+          // on-device to delete for those, only a JSON row shipped in
+          // the app itself.
+          onLongPress: (game.isLocal || game.isUserAdded)
+              ? () => onLongPressLocal(game)
+              : null,
           child: Container(
             decoration: BoxDecoration(
               color: AppTheme.surface(context),

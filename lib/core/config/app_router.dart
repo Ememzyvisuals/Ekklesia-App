@@ -15,6 +15,7 @@ import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/bookmarks/presentation/bookmarks_screen.dart';
 import '../../features/settings/presentation/network_diagnostics_screen.dart';
+import '../../features/games/presentation/bible_quiz_game_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 
 /// Gateway logic (PROJECT_MIGRATION_AUDIT.md Phase 2 — no account system,
@@ -116,6 +117,9 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
         path: '/network-diagnostics',
         builder: (context, state) => const NetworkDiagnosticsScreen()),
+    GoRoute(
+        path: '/bible-quiz',
+        builder: (context, state) => const BibleQuizGameScreen()),
     GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
   ],
 );

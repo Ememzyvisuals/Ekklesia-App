@@ -29,6 +29,7 @@ class GameEntry {
     this.embedUrl,
     this.indexFilePath,
     this.thumbnailPath,
+    this.isUserAdded = false,
   });
 
   final String id;
@@ -60,6 +61,12 @@ class GameEntry {
   /// bundle, if it had one. Local-entries-only counterpart to
   /// [thumbnailUrl].
   final String? thumbnailPath;
+
+  /// True only for a game added via Games' "Add game by link" dialog
+  /// (see UserAddedGamesRepository) — distinct from [isLocal] (a zip
+  /// import) so games_screen.dart's long-press-to-remove can route to
+  /// the correct repository's delete method for each source.
+  final bool isUserAdded;
 
   bool get isEmbeddable => embedUrl != null && embedUrl!.isNotEmpty;
   bool get isLocal => indexFilePath != null && indexFilePath!.isNotEmpty;

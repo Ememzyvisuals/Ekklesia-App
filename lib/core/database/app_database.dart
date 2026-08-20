@@ -368,6 +368,24 @@ class LocalGames extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A game added by pasting a URL directly in-app, rather than via the
+/// bundled developer-curated catalog (assets/data/games.json, requires
+/// a new app build to change) or a zip import (fully offline). This is
+/// the "bring back the ability to add a game by link" request — the app
+/// itself never fetches or vets these URLs beyond basic format
+/// validation; whatever's at the URL loads directly in a WebView
+/// exactly like a catalog entry's embedUrl does, so it needs a live
+/// internet connection to play, unlike LocalGames.
+class UserAddedGames extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get url => text()();
+  DateTimeColumn get addedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(tables: [
   BibleBooks,
   BibleChapters,
@@ -388,13 +406,14 @@ class LocalGames extends Table {
   TtsModelStatus,
   Messages,
   LocalGames,
+  UserAddedGames,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -407,6 +426,11 @@ class AppDatabase extends _$AppDatabase {
           // user data (bookmarks, notes, Bible progress, etc.) is at risk.
           if (from < 2) {
             await m.createTable(localGames);
+          }
+          // v2 -> v3: added UserAddedGames (URL-added games) — same
+          // additive-only guarantee.
+          if (from < 3) {
+            await m.createTable(userAddedGames);
           }
         },
       );

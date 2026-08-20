@@ -32,6 +32,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ('Global Crusade', Icons.public),
     ('Programs', Icons.calendar_month),
     ('Impact Academy', Icons.school),
+    ('Bible Quiz', Icons.quiz),
   ];
 
   late Future<ProgramSnapshot> _programFuture;
@@ -170,6 +171,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 'Global Crusade':
         context.push('/sermons', extra: 'GCK');
         return;
+      case 'Bible Quiz':
+        context.push('/bible-quiz');
+        return;
       default:
         context.push('/sermons', extra: label);
     }
@@ -200,7 +204,7 @@ class _FeaturedCard extends StatelessWidget {
           ? l10n.liveNowPlaying
           : featured.liveStatus == LiveStatus.upcoming
               ? l10n.liveStartingSoon
-              : 'Recently uploaded — DCLM Radio still live 24/7';
+              : 'Recently uploaded. DCLM Radio still live 24/7';
     } else {
       title = l10n.liveRadioDefault;
       subtitle = l10n.liveListenNow;
