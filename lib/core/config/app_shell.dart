@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'radio_mini_player.dart';
-import 'offline_indicator.dart';
 
 /// The persistent bottom-nav shell for the app's 5 primary tabs — Home,
 /// Bible, Games, AI, Settings.
@@ -33,15 +32,14 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          // Only ever visible when genuinely offline — see
-          // offline_indicator.dart. Sits above all tab content so it's
-          // consistent no matter which tab is active.
-          const OfflineIndicator(),
-          Expanded(child: navigationShell),
-        ],
-      ),
+      // Removed the always-mounted offline banner that used to sit
+      // here per explicit request (it added visible height above every
+      // tab's content, changing how the top of the screen looked even
+      // when nothing was wrong). Network Diagnostics is still reachable
+      // from Settings for anyone who wants to check connectivity on
+      // demand — this was specifically the unprompted, always-there
+      // banner above it.
+      body: navigationShell,
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

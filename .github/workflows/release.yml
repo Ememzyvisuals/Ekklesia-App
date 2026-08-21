@@ -67,6 +67,45 @@ jobs:
       - name: Generate platform folders
         run: flutter create . --platforms=android,ios --org com.ememzyvisuals --project-name ekklesia
 
+      # Evidence-driven, not speculative: a real device's Network
+      # Diagnostics screen (network_diagnostics.dart) showed EVERY
+      # single endpoint — including google.com itself — failing DNS
+      # resolution in under 40ms with "No address associated with
+      # hostname." That specific signature (instant, uniform failure
+      # across every hostname, far faster than any real DNS timeout)
+      # is the standard fingerprint of a missing INTERNET permission:
+      # Android denies the socket() call outright before any actual
+      # network I/O is attempted. `flutter create`'s default template
+      # does include this permission — confirmed via flutter/flutter's
+      # own issue tracker — but this guarantees it regardless of
+      # anything upstream (the template, or any later step) that could
+      # have dropped it, the same "verify and patch a freshly generated
+      # file" pattern already used for signing/desugaring/compileSdk
+      # elsewhere in this workflow.
+      - name: Ensure INTERNET permission is present
+        run: |
+          manifest="android/app/src/main/AndroidManifest.xml"
+          if grep -q 'android.permission.INTERNET' "$manifest"; then
+            echo "INTERNET permission already present in $manifest."
+          else
+            echo "INTERNET permission missing. Adding it now."
+            python3 - <<'PYEOF'
+          path = "android/app/src/main/AndroidManifest.xml"
+          with open(path) as f:
+              content = f.read()
+          permission_line = '    <uses-permission android:name="android.permission.INTERNET" />\n'
+          content = content.replace("<application", permission_line + "\n    <application", 1)
+          with open(path, "w") as f:
+              f.write(content)
+          PYEOF
+            if grep -q 'android.permission.INTERNET' "$manifest"; then
+              echo "INTERNET permission added successfully."
+            else
+              echo "::error::Failed to add INTERNET permission. Manifest structure may have changed."
+              exit 1
+            fi
+          fi
+
       # flutter_plugin_android_lifecycle (transitive, via file_picker —
       # and possibly others) now requires compileSdk 36+; `flutter create`
       # on this Flutter version still defaults lower, so
