@@ -50,7 +50,6 @@ class UserAddedGamesRepository {
   }
 
   Future<void> delete(String id) {
-    return (_db.delete(_db.userAddedGames)..where((t) => t.id.equals(id)))
-        .go();
+    return (_db.delete(_db.userAddedGames)..where((t) => t.id.equals(id))).go();
   }
 }

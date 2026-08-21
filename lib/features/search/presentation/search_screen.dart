@@ -285,8 +285,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               : _results.isEmpty
                   ? Center(
                       child: Text(AppLocalizations.of(context).searchNoResults,
-                          style:
-                              TextStyle(color: AppTheme.textSecondary(context))))
+                          style: TextStyle(
+                              color: AppTheme.textSecondary(context))))
                   : ListView.separated(
                       itemCount: _results.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),

@@ -319,7 +319,8 @@ class _DailyContentCard extends StatelessWidget {
                           textBuilder(snapshot.data!),
                           maxLines: maxLines,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: AppTheme.textPrimary(context)),
+                          style:
+                              TextStyle(color: AppTheme.textPrimary(context)),
                         ),
                     ],
                   ),

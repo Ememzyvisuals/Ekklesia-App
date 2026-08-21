@@ -96,7 +96,8 @@ class PrayerWorker {
       // the selected language. These are functional but simple
       // translations — worth a native-speaker review pass, same caveat
       // as the companion accessibility labels.
-      final templates = _fallbackTemplates[language] ?? _fallbackTemplates['english']!;
+      final templates =
+          _fallbackTemplates[language] ?? _fallbackTemplates['english']!;
       final index = (dateKey + language).hashCode.abs() % templates.length;
       text = templates[index](reference);
       source = 'offline_fallback';

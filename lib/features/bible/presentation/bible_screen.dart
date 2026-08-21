@@ -191,7 +191,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           targetContext,
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeInOut,
-          alignment: 0.3, // lands roughly a third down the screen, not glued to the very top
+          alignment:
+              0.3, // lands roughly a third down the screen, not glued to the very top
         );
       }
       if (!mounted) return;
@@ -203,8 +204,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       });
       var toggleCount = 0;
       const totalToggles = 6; // 3 full on/off blinks
-      _blinkTimer =
-          Timer.periodic(const Duration(milliseconds: 350), (timer) {
+      _blinkTimer = Timer.periodic(const Duration(milliseconds: 350), (timer) {
         if (!mounted) {
           timer.cancel();
           return;
@@ -841,8 +841,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   ),
                 );
               }
-              final isBlinking =
-                  _blinkVerseNumber == v.number && _blinkVisible;
+              final isBlinking = _blinkVerseNumber == v.number && _blinkVisible;
               final highlightColor = isBlinking
                   ? AppColors.accent.withValues(alpha: 0.55)
                   : _highlights[v.number] != null
@@ -1290,19 +1289,19 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
         ),
       );
     }
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const EkklesiaCompanion(
+          EkklesiaCompanion(
             type: EkklesiaCompanionType.bible,
             width: 110,
             isDecorative: true, // the text label below already says it
           ),
-          const SizedBox(height: 8),
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          const Text('Setting up your Bible'),
+          SizedBox(height: 8),
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Setting up your Bible'),
         ],
       ),
     );

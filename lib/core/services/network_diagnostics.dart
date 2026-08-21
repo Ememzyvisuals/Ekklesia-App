@@ -97,7 +97,10 @@ class NetworkDiagnostics {
     } catch (e) {
       sw.stop();
       return DiagnosticResult(
-          name: name, ok: false, detail: e.toString(), durationMs: sw.elapsedMilliseconds);
+          name: name,
+          ok: false,
+          detail: e.toString(),
+          durationMs: sw.elapsedMilliseconds);
     }
   }
 
@@ -135,8 +138,7 @@ class NetworkDiagnostics {
         'https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${AppConfig.youtubeApiKey}');
     yield await _checkHttps('TTS model host (huggingface.co)',
         'https://huggingface.co/Axiveri/Renpiper-mms-onnx-V1/resolve/main');
-    yield await _checkHttps(
-        'DCLM radio stream host (airtime.dclm.org)',
+    yield await _checkHttps('DCLM radio stream host (airtime.dclm.org)',
         AppConfig.dclmStreams['english']!);
   }
 }

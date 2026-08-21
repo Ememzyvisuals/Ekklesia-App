@@ -123,7 +123,7 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.all(32),
       children: [
         const SizedBox(height: 40),
-        Center(
+        const Center(
           child: EkklesiaCompanion(
             type: EkklesiaCompanionType.prayer,
             width: 110,

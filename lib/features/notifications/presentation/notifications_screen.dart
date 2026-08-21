@@ -77,7 +77,9 @@ class NotificationsScreen extends StatelessWidget {
               return ListTile(
                 leading: Icon(
                   _iconFor(n.category),
-                  color: n.read ? AppTheme.textSecondary(context) : AppColors.primary,
+                  color: n.read
+                      ? AppTheme.textSecondary(context)
+                      : AppColors.primary,
                 ),
                 title: Text(
                   n.title,
