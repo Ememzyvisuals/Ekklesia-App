@@ -122,6 +122,60 @@ class SettingsScreen extends ConsumerWidget {
 
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.text_fields),
+            title: const Text('Text size'),
+            subtitle: Text('${(ref.watch(fontScaleProvider) * 100).round()}% — applies app-wide'),
+            trailing: const Icon(Icons.chevron_right),
+            // Same control as the Bible screen's "Aa" button — added
+            // here too since not everyone will find it on the Bible
+            // screen first, and the specific request mentioned "or
+            // generally the application" as an acceptable alternative
+            // to a Bible-only setting.
+            onTap: () => showModalBottomSheet(
+              context: context,
+              builder: (sheetContext) => Consumer(
+                builder: (sheetContext, ref, _) {
+                  final scale = ref.watch(fontScaleProvider);
+                  return Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Text size',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppTheme.textPrimary(sheetContext))),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const Text('A', style: TextStyle(fontSize: 14)),
+                            Expanded(
+                              child: Slider(
+                                value: scale,
+                                min: AppSettingsService.minFontScale,
+                                max: AppSettingsService.maxFontScale,
+                                divisions: 15,
+                                label: '${(scale * 100).round()}%',
+                                onChanged: (value) => ref
+                                    .read(fontScaleProvider.notifier)
+                                    .setScale(value),
+                              ),
+                            ),
+                            const Text('A', style: TextStyle(fontSize: 24)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          const Divider(),
+          ListTile(
             leading: const Icon(Icons.brightness_6),
             title: Text(l10n.settingsAppearance),
           ),

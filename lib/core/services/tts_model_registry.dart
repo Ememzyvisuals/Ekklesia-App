@@ -133,17 +133,35 @@ class TtsModelRegistry {
           status: TtsModelDownloadStatus.downloading,
           downloadProgress: 0));
 
+      // Downloaded to `.part` temp files first, renamed to their real
+      // names only once each download fully completes — real bug found
+      // here: the old version downloaded straight to `tokensPath`/
+      // `modelPath`, so an interrupted download (connection drop, app
+      // killed mid-download, storage full partway through) left a
+      // partial file sitting at the exact path the "already downloaded?"
+      // check above looks for. That check only verifies the file exists
+      // and has non-zero length — a partial file satisfies both — so a
+      // failed download could get silently treated as "ready" on the
+      // next app open, then fail with a confusing "Could not generate
+      // audio" the moment playback actually tried to load it, with the
+      // download picker never getting another chance to show an error
+      // or a Retry button. Renaming only on success means a partial
+      // download can never occupy the final path.
+      final tokensPart = '$tokensPath.part';
+      final modelPart = '$modelPath.part';
+
       // tokens.txt first — tiny, and if this 404s (a language wrongly
       // marked available) we fail fast before downloading the much
       // larger model.onnx for nothing.
       await _dio.download(
         '${AppConfig.mmsOnnxRepoBaseUrl}/$mmsCode/tokens.txt',
-        tokensPath,
+        tokensPart,
       );
+      await File(tokensPart).rename(tokensPath);
 
       await _dio.download(
         '${AppConfig.mmsOnnxRepoBaseUrl}/$mmsCode/model.onnx',
-        modelPath,
+        modelPart,
         onReceiveProgress: (received, total) {
           if (total <= 0) return;
           controller.add(TtsModelInfo(
@@ -153,6 +171,7 @@ class TtsModelRegistry {
           ));
         },
       );
+      await File(modelPart).rename(modelPath);
 
       final ready = TtsModelInfo(
         language: mmsCode,
@@ -163,6 +182,16 @@ class TtsModelRegistry {
       await _persist(ready);
       controller.add(ready);
     } catch (e) {
+      // Clean up any leftover `.part` file from this failed attempt so a
+      // retry starts from a clean slate rather than potentially finding
+      // a stray partial file confusing a future run.
+      final dir = await _modelDir(mmsCode);
+      for (final name in ['model.onnx.part', 'tokens.txt.part']) {
+        final leftover = File(p.join(dir.path, name));
+        if (await leftover.exists()) {
+          await leftover.delete();
+        }
+      }
       final failed = TtsModelInfo(
         language: mmsCode,
         status: TtsModelDownloadStatus.error,

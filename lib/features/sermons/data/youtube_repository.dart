@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -188,10 +189,34 @@ class YoutubeRepository {
   /// single current value rather than a live-updating stream.
   Future<VideoEntry?> getLiveStatusOnce() => watchLiveStatus().first;
 
-  Future<http.Response> _get(String url) => http.get(Uri.parse(url));
+  // Real bug found here: this had no timeout at all, on either call site
+  // that uses it. Confirmed via Network Diagnostics on a real device —
+  // every other host the app talks to (Groq, the TTS model host, the
+  // DCLM radio stream) answered normally, but a request to
+  // googleapis.com genuinely never completed within a 10s bound. That
+  // pattern (one specific Google API host unreachable while everything
+  // else, including plain google.com DNS, works) is consistent with
+  // that host being blocked or heavily throttled by the network/carrier
+  // rather than an app-level bug — not something this app can fix from
+  // the client side. What the app CAN fix: without a timeout, a stalled
+  // request just hangs forever with the UI showing nothing useful
+  // rather than a clear, fast, honest error. Bounded to a real timeout,
+  // matching the same "unbounded native/network call can hang forever"
+  // pattern already fixed for TTS and DCLM Radio.
+  Future<http.Response> _get(String url) =>
+      http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
 
   Future<Map<String, dynamic>> _fetchJson(String url) async {
-    final response = await _get(url);
+    final http.Response response;
+    try {
+      response = await _get(url);
+    } on TimeoutException {
+      throw Exception(
+        'YouTube could not be reached (request timed out). This can '
+        'happen if YouTube/Google services are blocked or slow on the '
+        'current network. Try a different network and try again.',
+      );
+    }
     if (response.statusCode != 200) {
       throw Exception('YouTube API ${response.statusCode}: ${response.body}');
     }
@@ -309,9 +334,22 @@ class YoutubeRepository {
 
       return const Result.success(null);
     } catch (e) {
+      // Surface the specific, actionable message from _fetchJson's
+      // timeout branch above rather than always showing the same
+      // generic line regardless of cause — a timed-out request (likely
+      // network/carrier blocking Google API traffic) and, say, a
+      // rejected API key are different problems needing different
+      // action from the person, and the generic message was masking
+      // that distinction on both the Live and Sermon Library screens.
+      final detail = e.toString();
+      final message = detail.contains('request timed out')
+          ? 'YouTube could not be reached (request timed out). This can '
+              'happen if YouTube/Google services are blocked or slow on '
+              'the current network.'
+          : 'Couldn\'t refresh messages from YouTube.';
       return Result.failure(AppFailure(
-        message: 'Couldn\'t refresh messages from YouTube.',
-        debugDetail: e.toString(),
+        message: message,
+        debugDetail: detail,
       ));
     }
   }

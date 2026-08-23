@@ -55,32 +55,47 @@ class RadioService {
 
     _currentLanguage = languageKey;
 
-    await _player.setAudioSource(
-      AudioSource.uri(
-        Uri.parse(url),
-        tag: MediaItem(
-          id: url,
-          album: 'DCLM Radio',
-          title: 'DCLM Radio: ${_displayName(languageKey)}',
-          // Station art — real DCLM branding (Deeper Life Bible Church's
-          // own emblem), not a placeholder: pulled directly from the
-          // official radio.dclm.org web player's own default now-playing
-          // artwork (assets/img/album-art/d.png there), same file used
-          // twice under different names (favicon.png too) confirming
-          // it's their actual default fallback art, not one-off filler.
-          // Dynamic per-track art (the AzuraCast now-playing API's
-          // song.art field, already fetched in _fetchNowPlaying below)
-          // isn't wired to the lock-screen thumbnail yet — that needs
-          // audio_service's mediaItem-update API, more machinery than
-          // just_audio_background alone provides; using the static
-          // station logo is a real improvement over no art at all, not
-          // the final state.
-          artUri: Uri.parse('asset:///assets/images/dclm_radio_art.png'),
-        ),
-      ),
-    );
+    // Both calls below are unbounded native/platform operations with no
+    // timeout of their own — confirmed on a real device to hang forever
+    // (endless "Tap to Play" spinner, never an error) when the stream
+    // host is slow to respond or the connection stalls mid-handshake,
+    // the exact same "unbounded native call can hang forever" pattern
+    // already fixed for TTS (system_tts_engine.dart,
+    // local_tts_engine.dart). Network Diagnostics reaching the stream
+    // host fine doesn't rule this out — a raw socket connecting is a
+    // different operation from just_audio actually opening and starting
+    // to decode the stream. Bounded to a real timeout so a stall becomes
+    // a fast, visible error instead of an infinite spinner; live_screen.dart
+    // already has the friendly-message handling for a TimeoutException
+    // here, it just never had one to catch.
+    await _player
+        .setAudioSource(
+          AudioSource.uri(
+            Uri.parse(url),
+            tag: MediaItem(
+              id: url,
+              album: 'DCLM Radio',
+              title: 'DCLM Radio: ${_displayName(languageKey)}',
+              // Station art — real DCLM branding (Deeper Life Bible Church's
+              // own emblem), not a placeholder: pulled directly from the
+              // official radio.dclm.org web player's own default now-playing
+              // artwork (assets/img/album-art/d.png there), same file used
+              // twice under different names (favicon.png too) confirming
+              // it's their actual default fallback art, not one-off filler.
+              // Dynamic per-track art (the AzuraCast now-playing API's
+              // song.art field, already fetched in _fetchNowPlaying below)
+              // isn't wired to the lock-screen thumbnail yet — that needs
+              // audio_service's mediaItem-update API, more machinery than
+              // just_audio_background alone provides; using the static
+              // station logo is a real improvement over no art at all, not
+              // the final state.
+              artUri: Uri.parse('asset:///assets/images/dclm_radio_art.png'),
+            ),
+          ),
+        )
+        .timeout(const Duration(seconds: 15));
 
-    await _player.play();
+    await _player.play().timeout(const Duration(seconds: 15));
     _startNowPlayingPolling(languageKey);
   }
 

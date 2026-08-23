@@ -17,6 +17,7 @@ import '../../../core/config/app_theme.dart';
 import '../data/conversation_repository.dart';
 import '../domain/conversation.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
+import '../../../core/widgets/markdown_text.dart';
 
 /// AI Bible assistant — real Groq-backed chat, with a "Listen" action per
 /// assistant reply that routes to the correct TTS engine/persona via
@@ -162,7 +163,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     if (message == null || message.trim().isEmpty || _history.isNotEmpty) {
       return;
     }
-    _sendSuggested(message);
+    // The prayer text arrives straight from Groq (Markdown formatting
+    // and all) — stripped here so it doesn't show raw `**`/`- ` syntax
+    // in the user's own chat bubble, which (unlike the assistant's
+    // replies) isn't run through MarkdownText.
+    _sendSuggested(stripMarkdown(message));
   }
 
   Future<void> _persist(_ChatEntry entry) async {
@@ -436,13 +441,27 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    entry.text,
-                                    style: TextStyle(
-                                        color: isUser
-                                            ? Colors.white
-                                            : AppTheme.textPrimary(context)),
-                                  ),
+                                  // Groq replies come back as Markdown
+                                  // (headers, **bold**, lists, tables) —
+                                  // was rendered as a plain Text() before,
+                                  // showing raw `**`/`#`/`|` characters
+                                  // straight in the chat bubble. The
+                                  // user's own messages are never
+                                  // Markdown, so only the AI side goes
+                                  // through the renderer.
+                                  isUser
+                                      ? Text(
+                                          entry.text,
+                                          style: const TextStyle(
+                                              color: Colors.white),
+                                        )
+                                      : MarkdownText(
+                                          entry.text,
+                                          baseStyle: TextStyle(
+                                              color:
+                                                  AppTheme.textPrimary(
+                                                      context)),
+                                        ),
                                   if (!isUser) ...[
                                     const SizedBox(height: 6),
                                     Builder(builder: (context) {

@@ -10,6 +10,7 @@ import '../../../core/services/prayer_worker.dart';
 import '../../sermons/domain/video_entry.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
+import '../../../core/widgets/markdown_text.dart';
 
 /// Landing screen — live/upcoming/recent program card (ProgramWorker),
 /// today's verse and prayer (VerseWorker/PrayerWorker), categories, and
@@ -111,7 +112,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               icon: Icons.favorite_outline,
               label: AppLocalizations.of(context).homeTodaysPrayer,
               future: _prayerFuture,
-              textBuilder: (data) => data['text'] as String? ?? '',
+              // PrayerWorker's text comes back from Groq as Markdown —
+              // was shown raw here (`**`/`- ` visible in this truncated
+              // preview card, same bug as the AI Assistant chat and
+              // Impact Academy). A 3-line ellipsis-truncated Text can't
+              // host the full block-widget MarkdownText renderer (a
+              // Column of blocks has no single maxLines to truncate
+              // against), so this uses stripMarkdown() for plain,
+              // readable words here.
+              textBuilder: (data) =>
+                  stripMarkdown(data['text'] as String? ?? ''),
               maxLines: 3,
               // Was a bare navigate — landed on a blank AI chat with the
               // prayer nowhere to be seen, meaning: read the prayer,

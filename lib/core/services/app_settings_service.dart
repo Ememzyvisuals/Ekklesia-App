@@ -16,6 +16,29 @@ class AppSettingsService {
 
   static const _keyThemeMode = 'theme_mode'; // 'light' | 'dark' | 'system'
   static const _keyLanguage = 'preferred_language';
+  static const _keyFontScale = 'font_scale';
+
+  /// Bounds for the app-wide text scale preference — kept in one place
+  /// so the Bible screen's "Aa" control and Settings' quick entry can't
+  /// drift out of sync with what's actually allowed.
+  static const double minFontScale = 0.85;
+  static const double maxFontScale = 1.6;
+  static const double defaultFontScale = 1.0;
+
+  Future<double> getFontScale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getDouble(_keyFontScale) ?? defaultFontScale;
+    // num.clamp() returns num, not double, even when called on a double
+    // receiver — a well-known Dart gotcha. .toDouble() converts it back
+    // so this actually matches its declared Future<double> return type.
+    return value.clamp(minFontScale, maxFontScale).toDouble();
+  }
+
+  Future<void> setFontScale(double scale) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(
+        _keyFontScale, scale.clamp(minFontScale, maxFontScale).toDouble());
+  }
 
   Future<ThemeMode> getThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
@@ -101,4 +124,36 @@ class LanguageNotifier extends StateNotifier<String> {
 
 final languageProvider = StateNotifierProvider<LanguageNotifier, String>(
   (ref) => LanguageNotifier(),
+);
+
+/// Riverpod state for the app-wide text scale preference — applied via
+/// MaterialApp.router's `builder` in main.dart so it reaches every
+/// screen, and exposed via a control on the Bible screen's app bar (an
+/// "Aa" button) since older readers using this app for Scripture were
+/// the specific, named reason for adding it — not tucked away as just
+/// another line in Settings, though Settings also gets a quick entry
+/// for discoverability.
+class FontScaleNotifier extends StateNotifier<double> {
+  FontScaleNotifier() : super(AppSettingsService.defaultFontScale) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    state = await AppSettingsService.instance.getFontScale();
+  }
+
+  Future<void> setScale(double scale) async {
+    final clamped = scale
+        .clamp(
+          AppSettingsService.minFontScale,
+          AppSettingsService.maxFontScale,
+        )
+        .toDouble();
+    state = clamped;
+    await AppSettingsService.instance.setFontScale(clamped);
+  }
+}
+
+final fontScaleProvider = StateNotifierProvider<FontScaleNotifier, double>(
+  (ref) => FontScaleNotifier(),
 );

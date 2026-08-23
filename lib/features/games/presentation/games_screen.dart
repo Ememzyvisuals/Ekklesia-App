@@ -267,11 +267,29 @@ class _GamesScreenState extends State<GamesScreen> {
       }
       return;
     }
-    await UserAddedGamesRepository.instance.insert(title: title, url: rawUrl);
-    if (mounted) {
+    await _addGameByUrl(title: title, url: rawUrl);
+  }
+
+  Future<void> _addGameByUrl({required String title, required String url}) async {
+    try {
+      await UserAddedGamesRepository.instance.insert(title: title, url: url);
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Added "$title"')));
       _load();
+    } catch (e) {
+      // Real bug found here: this call used to be unguarded — if the
+      // insert failed for any reason (confirmed real case: the
+      // underlying table missing after certain upgrade paths, see
+      // app_database.dart's migration self-heal fix), the exception
+      // just propagated silently past this point. No snackbar, no
+      // _load() call, nothing on screen — from the person's side it
+      // looked exactly like "I added a game and nothing happened,"
+      // with no way to tell it had actually failed.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Could not add that game: $e'),
+      ));
     }
   }
 }

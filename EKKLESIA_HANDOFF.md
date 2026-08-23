@@ -1,0 +1,822 @@
+# Ekklesia App — Project Handoff & Debugging Log
+
+**Purpose of this document:** This is a complete working record of everything
+done on this project so far, written so a fresh Claude session (or any
+developer) can pick up exactly where things left off — no re-diagnosing
+things already solved, no re-introducing bugs already fixed.
+
+**How to use this doc:** Upload this file alongside a fresh download of the
+GitHub repo. Read the "Workflow Pattern" section first — it's the exact
+operating procedure this project runs on and must keep running on, since the
+developer works entirely from a phone (Termux + GitHub Actions, no local
+Flutter SDK, no computer).
+
+---
+
+## 0. Project Basics
+
+- **Repo:** `Ememzyvisuals/Ekklesia-App` on GitHub (public repo)
+- **Owner:** Emmanuel Ariyo (Ememzyvisuals), works entirely from a phone via
+  **Termux** (Android terminal app). No Flutter SDK, no Android SDK, no
+  computer — every build, format check, and release happens on **GitHub
+  Actions**.
+- **What the app is:** "Ekklesia" — an offline-first Christian devotional app
+  for DCLM (Deeper Life Campus Fellowship / Deeper Life Bible Church)
+  members. Multilingual: English, Yoruba, Hausa, Igbo, Nigerian Pidgin.
+  Features: Bible reading (offline, bundled per-language datasets), AI
+  Bible assistant (Groq-backed), daily verse/prayer, Impact Academy
+  (article-style teaching content with AI-generated quizzes), Sunday
+  Service / Bible Study / Global Crusade / Programs sermon library
+  (YouTube-backed), DCLM Radio (live Icecast/Airtime streams), offline
+  games (imported .zip, added-by-URL, or the built-in native Bible Quiz
+  game), on-device TTS narration of Bible chapters.
+- **Package name:** `com.ememzyvisuals.ekklesia`
+- **Stack:** Flutter, Riverpod (state), GoRouter (`StatefulShellRoute` for
+  the 5-tab persistent bottom nav), Drift (SQLite ORM, local-first data),
+  `sherpa_onnx` (on-device TTS for yo/ha/pcm), `flutter_tts` (system TTS for
+  English), Groq API (AI chat + summaries), YouTube Data API v3, DCLM's own
+  Icecast/Airtime radio streams, `just_audio`/`just_audio_background`.
+- **No Firebase, no backend server anywhere.** Fully offline-first by
+  design; the only network calls are Groq, YouTube Data API, the TTS model
+  download host (Hugging Face), and the DCLM radio stream itself — all
+  opt-in/on-demand, never required for the app to open.
+- **`android/` and `ios/` folders are NEVER committed to the repo.** They're
+  generated fresh by `flutter create .` inside `release.yml` on every single
+  release build. This is deliberate (keeps the repo lean, avoids native
+  project drift) but means **any native Android/iOS customization must be
+  re-applied by a CI script every single build** — this is the single most
+  important architectural fact for debugging native build issues. See
+  Section 2.
+
+---
+
+## 1. Workflow Pattern (the exact operating procedure)
+
+This is how every single fix in this project has been delivered. Keep doing
+it exactly this way.
+
+### 1.1 Getting the current code
+The person cannot easily `git pull` and diff cleanly on Termux, so every
+session starts with a **fresh clone**:
+```bash
+git clone --depth 1 https://github.com/Ememzyvisuals/Ekklesia-App.git ekklesia-live
+cd ekklesia-live
+```
+Never assume a previous session's local copy is still accurate — always
+re-clone before making changes, since the person may have pushed changes via
+Termux directly in between Claude sessions.
+
+### 1.2 Making changes
+- Edit files directly in the cloned repo.
+- **Always verify before shipping**, every single time, using pure static
+  checks (no Flutter SDK is ever available to actually compile):
+  - Brace balance: `grep -o '{' file | wc -l` vs `grep -o '}' file | wc -l`
+  - For YAML (GitHub Actions files): `python3 -c "import yaml; yaml.safe_load(open('file'))"`
+  - For anything with heredocs/multi-line bash inside YAML `run:` blocks:
+    extract the exact string GitHub Actions would execute (via
+    `yaml.safe_load`, not manual reading) and run it against a realistic
+    fixture file to confirm it does what's intended. This caught real bugs
+    (see Section 3.2) that manual reading missed.
+  - Search for **em-dashes (`—`) in user-facing strings** — the person
+    explicitly and repeatedly asked for zero dashes anywhere in the UI
+    (error messages, status text, loading text, labels). This is a
+    recurring category of bug — new dashes keep slipping in, including from
+    Claude's own new code. **Always grep the whole codebase for `—`,
+    excluding comment lines, before finishing any response that touches UI
+    strings.** Pattern used:
+    ```bash
+    grep -rn "—" lib/ --include="*.dart" | grep -v "^\S*:[0-9]*:\s*//"
+    ```
+    Comments using em-dashes are fine; anything inside a `Text(...)`,
+    `SnackBar(...)`, exception message, or similar user-visible string is
+    not.
+  - **Const-correctness check**: a recurring, real bug pattern is wrapping a
+    non-const value (usually `AppTheme.xxx(context)`, which needs
+    `BuildContext`) inside a `const TextStyle(...)`/`const Icon(...)`/etc.
+    This is a hard compile error, not just a lint. After any batch
+    find-and-replace involving color/theme values, run a bracket-matched
+    scan (not a naive regex) across the whole codebase:
+    ```bash
+    python3 -c "
+    import re, glob
+    pattern = re.compile(r'const\s+(TextStyle|Icon|BoxDecoration)\(')
+    for path in glob.glob('lib/**/*.dart', recursive=True):
+        content = open(path).read()
+        for m in pattern.finditer(content):
+            start = m.end() - 1
+            depth = 0; i = start
+            while i < len(content):
+                if content[i] == '(': depth += 1
+                elif content[i] == ')':
+                    depth -= 1
+                    if depth == 0: break
+                i += 1
+            call_body = content[start:i+1]
+            if 'AppTheme.' in call_body and '(context)' in call_body:
+                print(path, call_body[:100])
+    "
+    ```
+    This exact bug was introduced by Claude's own earlier batch fix and
+    caught 6 real instances across the codebase in one pass (Section 3.6).
+
+### 1.3 Delivering changes
+- **Never** ask the person to copy-paste code manually. Always:
+  1. `zip` only the **changed/added files** (not the whole repo) into
+     `/mnt/user-data/outputs/some-descriptive-name.zip`, preserving their
+     real relative paths (`lib/features/...`) so unzipping over the repo
+     places them correctly.
+  2. Call `present_files` on the zip.
+  3. Give the exact Termux commands to apply it:
+     ```bash
+     cd ~/storage/downloads
+     unzip -o some-descriptive-name.zip -d Ekklesia-main
+     cd Ekklesia-main
+     git add -A
+     git commit -m "Short, accurate description of the fix"
+     git push
+     ```
+     (The extracted folder is always named `Ekklesia-main` — matches what
+     the person has used throughout.)
+  4. If a **release build** needs re-triggering (the `release.yml` workflow
+     is tag-triggered, not `workflow_dispatch`), also give:
+     ```bash
+     git tag -d v1.0.0
+     git push origin :refs/tags/v1.0.0
+     git tag v1.0.0
+     git push origin v1.0.0
+     ```
+  5. If deleting a file is required (rare, but happened for obsolete
+     logo/dead-code files), explicitly tell them the exact `rm` command to
+     run after unzipping — a zip can't express "delete this file that isn't
+     in the zip."
+- If a fix is large/spans many files, it's fine to package multiple zips
+  across a few messages rather than one giant zip — the person has
+  successfully applied 20+ separate patch zips this way across the project.
+
+### 1.4 Reading GitHub Actions logs
+The person cannot run `flutter analyze`/`flutter build` locally at all — the
+**only** signal on whether code compiles is a GitHub Actions log,
+screenshotted and sent by the person after every push. This means:
+- Every fix should be as close to "guaranteed correct" as static
+  verification allows (Section 1.2), because each round trip costs the
+  person a real CI run (several minutes) plus a screenshot-and-explain
+  cycle.
+- When reading a screenshotted error log: the actual failing line/error is
+  usually near the bottom, above `Process completed with exit code 1`.
+  `flutter analyze` errors show file:line:col; Gradle errors show a `* What
+  went wrong` section.
+- **Never assume a fix worked without confirmation** — always ask for or
+  wait for the next log/screenshot before declaring something resolved.
+
+### 1.5 Honesty conventions established in this project
+- When a fix can't be verified (no Flutter SDK/Android SDK available to
+  actually compile+run), **say so explicitly** and flag which specific
+  fix is lowest-confidence, so the person knows what to test most
+  carefully. Example: the sherpa_onnx isolate-offload fix for on-device TTS
+  (Section 4) was explicitly flagged as unverified/highest-risk when
+  shipped.
+- When a hypothesis turns out wrong (e.g., "missing INTERNET permission"
+  was first suspected, then research showed `flutter create` includes it
+  by default), **say so plainly** rather than quietly dropping the theory.
+  The eventual real fix (Section 3.9) was still to defensively guarantee
+  the permission in CI, because later diagnostic evidence (Section 3.10)
+  strongly re-confirmed a missing-permission signature.
+- Own mistakes directly. Several bugs in this log were introduced by
+  Claude's own earlier fixes (const-context bug, YAML indentation bug,
+  network diagnostics testing methodology bugs) — each is documented here
+  exactly as what it was: a real bug Claude introduced and then fixed,
+  not glossed over.
+
+---
+
+## 2. Critical Architecture Facts for Debugging Native Build Issues
+
+Because `android/` is never committed and is regenerated by `flutter create
+.` on every release build, **all native Android customization lives inside
+`.github/workflows/release.yml` as CI steps that patch the freshly generated
+files.** Current patches applied, in order, after `flutter create .`:
+
+1. **Ensure INTERNET permission** — checks `AndroidManifest.xml` for
+   `android.permission.INTERNET`; adds it via a Python script if missing.
+   (Section 3.9/3.10 — evidence-driven, not yet 100% confirmed as the exact
+   root cause, but defensively guaranteed either way.)
+2. **Bump compileSdk to 36** — via a root-level `subprojects {
+   afterEvaluate { ... } }` block in `android/build.gradle.kts`, **prepended**
+   (not appended) to the file — this ordering matters, see Section 3.4.
+3. **Enable core library desugaring** — required by
+   `flutter_local_notifications`.
+4. **Patch flutter_inappwebview_android's proguard config** — a transitive
+   dependency (via `youtube_player_flutter`) ships a proguard file
+   incompatible with current AGP; patched directly in the pub cache.
+5. **Configure Android release signing** — injects a real
+   `signingConfigs { release { ... } }` block reading from
+   `android/key.properties`, built from 4 GitHub secrets
+   (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_PASSWORD`, `ANDROID_KEY_ALIAS`). Handles both Groovy
+   (`build.gradle`) and Kotlin DSL (`build.gradle.kts`) — current Flutter
+   defaults to Kotlin DSL.
+6. **Generate app icons** (`flutter_launcher_icons`) and **splash screen**
+   (`flutter_native_splash`) — configured in `pubspec.yaml`, using the real
+   supplied Ekklesia logo (`assets/branding/ekklesia_logo_icon_source.png`
+   for the icon source, `assets/branding/ekklesia_logo.png` bundled at
+   runtime for in-app use).
+
+**Rule for any future native Android issue:** the fix almost always belongs
+in `release.yml` as a new "verify and patch a freshly generated file" step,
+matching the exact pattern of the 6 above — not as a committed native file
+edit, which would just get overwritten on the next `flutter create .`.
+
+**Testing pattern for `release.yml` changes**, established after two real
+bugs (Sections 3.2, 3.4) shipped from *not* doing this: never trust manual
+reading of a YAML `run:` block. Always extract the actual script via
+`yaml.safe_load()` and execute it against a realistic fixture file mimicking
+what `flutter create .` really generates, before shipping.
+
+---
+
+## 3. Full Chronological Issue Log
+
+### 3.1 CI pipeline bootstrapping (early session)
+- **`pubspec.lock` never committed** → `dependency_check.yml`'s "verify lock
+  is in sync" step was silently a no-op (`git diff` on an untracked file
+  always reports no changes). Fixed to fail loudly with a clear message if
+  the lockfile isn't committed. Added a `generate_lockfile.yml`
+  (`workflow_dispatch`) so the lockfile can be generated on a GitHub runner
+  since there's no local Flutter SDK.
+- **Dead Firebase steps in `release.yml`** — the app has zero Firebase
+  dependency (confirmed: no `firebase_core` in `pubspec.yaml`, no
+  `Firebase.initializeApp()` anywhere), but `release.yml` was still writing
+  `google-services.json` and patching Gradle to apply the Google Services
+  plugin. Removed entirely.
+- **`flutter analyze` never actually ran before** (blocked earlier by the
+  above) — first real run surfaced **13 genuinely pre-existing bugs**
+  unrelated to any of Claude's changes: wrong Drift-generated class name
+  (`MessageData` → `Message`), `BibleVerse.text` → should've been
+  `.content`, missing `uiLocalNotificationDateInterpretation` arg for
+  `flutter_local_notifications`, a dead unused field, two missing imports,
+  `AvatarService.catalog` accessed as instance member when it's `static`,
+  and two undeclared asset directories. All fixed.
+- **`auto_format_fix.yml` had no safety check** — `dart fix --apply` +
+  `dart format` committed and pushed straight to `main` with zero
+  verification. It once broke a valid `final x = Something();` field into
+  invalid `const x = Something();` (a known `dart fix` unsafety on this
+  project's analyzer version) — twice in a row. Real fix: moved the field
+  off the trigger pattern (`late final`, assigned in `initState`) **and**
+  added a `flutter analyze --fatal-infos --fatal-warnings` step to
+  `auto_format_fix.yml` right before the commit/push step, so a bad
+  auto-fix now just fails the job instead of landing on `main`.
+
+### 3.2 Release build: signing config Kotlin DSL bug (real bug, Claude's)
+`build.gradle.kts` uses Kotlin DSL by default on current Flutter, but the
+original signing-config patch script injected **Groovy** syntax
+unconditionally. Failed with "Expecting an element." Fixed by branching the
+injected syntax on file extension (`.kts` vs `.gradle`), verified against a
+realistic fixture before shipping.
+
+### 3.3 Release build: proguard incompatibility (real bug, upstream)
+`flutter_inappwebview_android` (pulled in transitively via
+`youtube_player_flutter`) calls `getDefaultProguardFile('proguard-android.txt')`,
+which current AGP/R8 rejects outright. Not this project's bug — patched
+directly in the pub cache via a `sed` step in `release.yml`.
+
+### 3.4 Release build: compileSdk override + afterEvaluate ordering (two real bugs, Claude's, in sequence)
+1. First attempt: appended a second `android { compileSdk = 36 }` block to
+   `build.gradle.kts` — didn't work; the actual failing subproject
+   (`:file_picker`, not `:app`) has its **own** separate compileSdk
+   declaration in its own pub-cache'd `build.gradle`, which app-level edits
+   can never touch.
+2. Correct fix: a root-level `subprojects { afterEvaluate { ... } }` block
+   that forces compileSdk on **every** subproject, including plugin
+   modules. But the first version of this **appended** the block to the end
+   of the file — crashed with "Cannot run Project.afterEvaluate(Action)
+   when the project is already evaluated," because the file already had
+   `subprojects { project.evaluationDependsOn(":app") }`, and that call
+   forces early evaluation. Fixed by **prepending** the new block instead
+   (before any other statement can force early evaluation) — order in the
+   file is semantically significant for Gradle Kotlin DSL scripts.
+
+### 3.5 Release build: core library desugaring (real bug, upstream)
+`flutter_local_notifications` uses `java.time` APIs requiring core library
+desugaring, not enabled by default. Fixed by appending
+`compileOptions { isCoreLibraryDesugaringEnabled = true }` +
+`dependencies { coreLibraryDesugaring(...) }` — reopening `android {}` and
+`dependencies {}` blocks additively is legal in both Gradle DSLs (verified
+against fixtures).
+
+### 3.6 Systemic dark-mode bug (real bug, pre-existing + Claude's own regression)
+`AppColors.surface`/`.textPrimary`/`.textSecondary` are **hardcoded
+light-only constants**; `AppTheme.surface(context)`/etc. are the correct
+theme-aware versions. Found and fixed across **9 files**: Home category
+tiles + Today's Verse/Prayer cards, Bible screen (including the language
+dropdown — same root cause as a separately reported "white background makes
+dropdown text invisible in dark mode" bug), AI chat bubbles, Impact Academy
+list, quiz screen, bookmarks, downloads, notifications, search.
+
+**A batch sed-based fix for this later introduced 6 real compile errors**
+(`const TextStyle(color: AppTheme.textSecondary(context), ...)` — const
+wrapping a non-const context-dependent call). Found via the bracket-matched
+scan in Section 1.2 and fixed. This is the canonical example of why that
+scan step now exists.
+
+### 3.7 Navigation architecture: no shared bottom nav (real bug, pre-existing)
+Only `HomeScreen` had a hand-built `NavigationBar` in its own `Scaffold`;
+every other screen (Bible, Settings, AI, Games) was an independent
+top-level `GoRoute` with **no nav bar at all**. Leaving Home meant getting
+stranded with no way back except force-closing the app (compounded by
+`context.go()` replacing the nav stack rather than pushing). Fixed by
+rebuilding the router around `StatefulShellRoute.indexedStack` with one
+persistent `NavigationBar` shared across 5 tabs (Home, Bible, **Games**
+— added as a real tab, previously only reachable via Settings, per
+explicit request — AI, Settings), in a new `AppShell` widget
+(`lib/core/config/app_shell.dart`).
+
+Follow-on bug: the first version of `app_shell.dart` used
+`StatefulNavigationShell` (a `go_router` type) without importing
+`go_router` — real compile error, fixed immediately.
+
+Also added: a persistent **DCLM Radio mini-player** (`radio_mini_player.dart`)
+shown above the bottom nav on every tab once playback starts (play/pause/stop,
+tap to open full Live screen) — addresses "radio needs its own navigation
+so I don't have to go back to the Live tab to pause it."
+
+Also added: explicit "back to Home" button on the Live screen (uses
+`context.go('/home')`, not `pop()`, since Live can be reached from any tab
+via the mini-player) and explicit "back to Games" button + `PopScope` guard
+on the game WebView screen (Android back gesture can get captured by a
+game's own in-page JS/history instead of exiting the screen without this).
+
+### 3.8 Multi-language support: three separate real bugs
+1. **`VerseWorker.getTodaysVerse()` hardcoded `language: 'en'`** when
+   fetching passage text, ignoring the actual requested language entirely
+   (doc comment even said "(English)"). Fixed to use the real language via
+   `kAppLanguageToBibleCode`.
+2. **`PrayerWorker`'s `language` parameter was accepted but never used** in
+   the Groq prompt — always generated English regardless of selection.
+   Fixed to translate the system prompt's target language. Also fixed the
+   prayer cache key to include language (was date-only, so switching
+   language mid-day still served the previous language's cached text).
+   **Fallback templates** (used when Groq fails) were a single hardcoded
+   English string — this is very likely why "the prayer is always the same
+   thing" was reported, if Groq was failing consistently (which it was —
+   see Section 3.11). Replaced with several templates per language, chosen
+   deterministically per day (flagged: Yoruba/Hausa/Igbo translations are
+   functional but need native-speaker review).
+3. **`bibleLanguageProvider` (Bible screen's own language state) was
+   completely disconnected from `languageProvider` (Settings' app-wide
+   language)** — two independent Riverpod providers that never synced.
+   Changing language in Settings did nothing to the Bible screen. Fixed:
+   `bibleLanguageProvider`'s default now derives from `languageProvider`
+   (still overridable per-session via the Bible screen's own dropdown).
+
+**Known unfixed edge case:** `parseBibleReference()` only recognizes
+**English** book names. Bookmarking or searching a verse while reading in
+Yoruba/Hausa/Igbo/Pidgin stores the reference using that language's own book
+name, which will fail to parse when jumping back to it later. Not yet fixed
+— flagged as a real, distinct follow-up.
+
+### 3.9 Critical crash: Flutter Material framework doesn't support yo/ha/ig/pcm locales (real bug, confirmed via research)
+Forcing `MaterialApp.router`'s `locale:` directly to `Locale('yo')` /
+`Locale('ig')` / etc. left Flutter's own framework-level localization
+delegates (`GlobalMaterialLocalizations`, `GlobalCupertinoLocalizations`,
+`GlobalWidgetsLocalizations`) unable to resolve anything — those three
+languages are not among the ~80 languages Flutter ships built-in
+translations for (confirmed via Flutter's own tracked issues). The app's
+own custom `AppLocalizations` (generated from `lib/l10n/*.arb`, which
+**does** cover all 5 languages) kept working fine, but Material-internal
+widgets (tooltips, semantics used by `NavigationBar`, etc.) broke — visible
+on a real device as: header text renders correctly in Igbo, but the bottom
+nav area collapses into a blank/gray box.
+
+**Fix:** three thin custom `LocalizationsDelegate` wrapper classes
+(`_FallbackMaterialLocalizationsDelegate`, `_FallbackCupertinoLocalizationsDelegate`,
+`_FallbackWidgetsLocalizationsDelegate` in `main.dart`) that report
+`isSupported()` as always true, but internally load the real Flutter
+translations only for genuinely-supported locales, falling back to English
+for yo/ha/ig/pcm. This means a few framework-only strings (default dialog
+button labels, etc.) show in English for those 4 languages — an
+acknowledged, minor, honest degradation — while every one of the app's own
+translated strings keeps working exactly as before.
+
+**Status: shipped, not yet re-confirmed fixed on a real device** (last
+report was "not sure if this build has that fix yet" — needs a fresh
+Igbo/Yoruba test with a build that definitely includes this commit).
+
+### 3.10 Network diagnostics tool + persistent offline indicator (built), then partially reverted per request
+Built `lib/core/services/network_diagnostics.dart` +
+`lib/features/settings/presentation/network_diagnostics_screen.dart`
+(Settings → Network Diagnostics) — runs real, individual checks against
+every actual network dependency (raw DNS+socket to google.com, Groq key
+presence, Groq API, YouTube Data API, TTS model host, DCLM radio stream),
+showing exact raw results/errors. Also built a small always-visible
+"offline" banner (`ConnectivityMonitor` + `OfflineIndicator`) — **this was
+later explicitly removed per request** (it changed the visible layout at
+the top of every screen; the diagnostics screen itself was kept). Both
+`connectivity_monitor.dart` and `offline_indicator.dart` files were
+**deleted entirely** (not just unwired) since they had no other consumer —
+if either filename appears in a status check as "not found," that is
+correct/expected, not a bug.
+
+**Two real bugs in the diagnostics tool itself, found from real usage,
+both fixed:**
+1. The Groq API check never sent an `Authorization` header — guaranteed a
+   false HTTP 401 regardless of whether the person's actual key was valid.
+   Fixed to send the real configured key.
+2. The DCLM radio stream check used `http.get()`, which waits for the full
+   response body — but a live radio stream is a **continuous, infinite**
+   body by design, so this check was mathematically guaranteed to time out
+   after exactly the configured duration regardless of whether the stream
+   was actually healthy. It gave zero real signal, ever. Fixed to use
+   `http.Client().send()` and read only the response headers/status,
+   explicitly never draining the (endless) body stream.
+
+### 3.11 Deprecated Groq models (real bug, confirmed via Groq's own announcement)
+`AppConfig.groqPreferredModel`/`.groqFallbackModel` were hardcoded to
+`llama-3.3-70b-versatile` and `llama-3.1-8b-instant` — **both officially
+deprecated by Groq on June 17, 2026**, confirmed directly against Groq's own
+deprecations documentation. Every Groq call (chat, Impact Academy
+summaries/quizzes, prayer generation) was very likely hitting
+`model_decommissioned` since that date. This is almost certainly the actual
+root cause behind "AI Assistant: something went wrong sending that
+message," "Impact Academy: raw SocketException dump," and the "prayer is
+always the same" symptom (since it kept hitting the fallback path).
+
+**Fix:** updated to Groq's own recommended replacements —
+`openai/gpt-oss-120b` and `openai/gpt-oss-20b` — confirmed as real,
+currently-listed model IDs via Groq's own docs.
+
+**Compounding bug, also fixed:** `AIConfig.instance.verify()` (which picks
+the actual live model to use) only ever ran **once, at app startup** —
+adding or changing the Groq key in Settings never triggered it again. So
+even after fixing the model IDs, someone who already has the app installed
+and adds/changes their key needed an app restart to pick up a working
+model. Fixed: Settings' key-save handler now calls
+`AIConfig.instance.verify()` immediately after saving.
+
+**Status: shipped, not yet confirmed fixed on a real device.** This is the
+single most likely explanation for most of the AI/prayer/quiz-generation
+symptoms reported — re-test this first.
+
+### 3.12 Raw exception text shown directly in the UI (recurring bug pattern, multiple real instances)
+A pattern of `_error = e.toString()` or `Text('Error: $e')` surfacing raw
+`SocketException`/`ClientException` text (including literal API URLs)
+directly in the UI, instead of a friendly message. Fixed **piecemeal
+across many sessions** as instances were found — **do not assume this
+pattern is fully eliminated**; a fresh exhaustive grep is worth running
+periodically:
+```bash
+grep -rn "Error: \$e\|_error = e.toString()\|content: Text('Error\|Text(e.toString())" lib/ --include="*.dart"
+```
+Confirmed-fixed locations so far: AI Assistant screen (main send path +
+Listen/TTS path), Live screen, Bible screen (chapter-open path +
+reference-jump path, the latter now shows `BibleReferenceException.message`
+cleanly instead of the raw `toString()` with type prefix), Impact Academy
+(`learn_screen.dart`, both the content-load path and the "Generate Summary
++ Quiz" button — the latter now categorizes by error content: offline,
+model unavailable, key rejected, or generic).
+
+### 3.13 Bible reading UI redesign
+Original chapter view was plain, unstyled text. Redesigned to match a
+reference screenshot the person supplied (a polished commercial Bible app):
+large centered chapter number, small-caps book name header, superscript-style
+verse numbers (small font size directly preceding larger body text, no
+manual baseline offset needed), generous line height, a "next chapter" pill
+at the end of the list to keep reading forward, and a compact headphone
+icon in place of the old full-width "Listen" button.
+
+**Also added: verse-jump-with-blink navigation.** Tapping a search result
+or bookmark now opens `BibleScreen(initialReference: ..., initialLanguage: ...)`
+directly (via a fresh `Navigator.push`, deliberately bypassing the
+shell-tab `/bible` route, since navigating a `StatefulShellRoute` branch's
+root doesn't reliably create a new widget instance with new params if that
+branch was already visited), scrolls to the exact verse via
+`Scrollable.ensureVisible` with a `GlobalKey` per verse, and blinks it gold
+3 times via a `Timer.periodic` toggle.
+
+### 3.14 AI conversation history (new feature)
+Added a `Drawer` (left-side menu icon appears automatically once a
+`Scaffold.drawer` is set — this is why it's on the left, matching the
+explicit request) listing every past conversation session grouped by
+`sessionId`, each showing a preview (first user message) and relative date
+("Today"/"Yesterday"/"3 days ago"), plus "New Chat". `_sessionId` was
+changed from `late final` (fixed for the screen's lifetime, one per
+calendar day) to mutable, with `_loadHistory()` now clearing and reloading
+on session switch, and a `_initialMessageHandled` guard so the
+auto-send-prayer-from-Home feature (below) can never re-fire on a session
+switch.
+
+**Also added:** tapping "Today's Prayer" on Home now navigates to AI **and**
+auto-sends that exact prayer text immediately (was: bare navigation, prayer
+text nowhere to be found, person had to manually retype it) — passed via
+GoRouter's `extra` parameter through to `AiAssistantScreen(initialMessage: ...)`.
+
+### 3.15 On-device TTS: two real bugs, one confirmed-fixed, one flagged low-confidence
+1. **English (`SystemTtsEngine`, wraps `flutter_tts`)**: `synthesizeToFile()`'s
+   Future only completes via a native platform completion callback,
+   documented across `flutter_tts`'s own issue tracker as simply never
+   firing on a meaningful number of Android OEM TTS engines. No timeout
+   existed at all — confirmed hang on a real device tapping "Listen."
+   Fixed: 45s timeout + a real `SystemTtsTimeoutException` with a friendly
+   error, instead of an infinite spinner.
+2. **Yoruba/Hausa/Pidgin (`LocalTtsEngine`, wraps `sherpa_onnx`)**: found
+   while investigating #1 — `tts.generate(...)` is a **synchronous,
+   CPU-bound native FFI call**, run on the main isolate. This doesn't just
+   risk hanging; it **freezes the entire UI** (no touches, no rendering)
+   for the full duration of ONNX inference, which for a full chapter on
+   real low-end Android hardware can be many real seconds. A `.timeout()`
+   wrapper cannot fix this (a blocking synchronous call prevents the
+   isolate's own event loop, including timers, from running at all until
+   it returns). Fixed by moving the whole load+generate+free sequence into
+   a spawned isolate via `compute()`, with a self-contained top-level
+   function (can't pass the native-pointer-holding `OfflineTts` object
+   across isolates, so it's loaded fresh inside the spawned isolate each
+   call). The old "keep one model loaded across calls" caching fields
+   (`_tts`, `_loadedLanguage`, `_ensureLoaded()`, `unload()`) became fully
+   dead code under this design and were removed (would have failed CI's
+   `unused_element`/`unused_field` lints otherwise).
+
+**Explicitly flagged when shipped: the isolate-offload fix (#2) is the
+lowest-confidence fix of that whole batch** — could not be compiled/run to
+verify, unlike the timeout-based fixes which are simple enough to reason
+about with high confidence.
+
+**Status per the most recent screenshots: BOTH still show "Could not
+generate audio right now. Please try again."** for English AND Yoruba —
+i.e., **this is still broken, not yet root-caused after the above fixes**.
+Given Section 3.11's Groq model fix was shipped around the same time and
+TTS generation is a **separate system from Groq** (on-device, no Groq
+involvement) — this specific symptom needs fresh, dedicated
+investigation. Worth checking first: whether the friendly error is masking
+a *new*, different failure than the ones already fixed (i.e., the 45s
+timeout / isolate fix might both be working exactly as designed, correctly
+catching a **different** underlying failure that hasn't been diagnosed yet
+— e.g., a genuinely missing/corrupted downloaded model file for Yoruba, or
+a `flutter_tts` initialization problem specific to the test device's
+installed TTS engines for English). **This is a top-priority open item.**
+
+### 3.16 DCLM Radio hang (partially addressed, status unclear)
+Earlier fix: added 12s timeouts to `RadioService.playLanguage()`'s
+`setAudioSource`/`play()` calls (previously unguarded, matching the same
+"unbounded native call can hang forever" pattern as Section 3.15). **Most
+recent report ("radio is not working at all, it just keeps running,
+running") suggests this may still be unresolved**, though it's also
+possible the diagnostic confusion in Section 3.10 (the radio stream test
+that was structurally guaranteed to time out regardless of real health) was
+muddying the picture. **Needs a fresh test now that the diagnostic tool
+itself is fixed** — run Network Diagnostics again and check specifically
+whether "DCLM radio stream host" now reports a real, meaningful result
+before assuming the in-app player itself is still broken.
+
+### 3.17 Bible Quiz game + URL-based games (new features, built)
+- **Bible Quiz**: fully native Flutter mini-game (no WebView, always works
+  offline) — `lib/features/games/domain/bible_quiz_data.dart` (15 curated
+  KJV verses with blanked key words) + `bible_quiz_game_screen.dart`
+  (tap-to-fill word bank mechanic — the reference screenshot's own UI label
+  said "Tap or Drag," so tap-only satisfies that spec without needing a
+  drag-and-drop library), 8-question rounds, real running score, results
+  screen with "Play Again." Reachable from **both** Home's category grid
+  (6th tile) and a permanent featured card at the top of the Games tab.
+- **URL-based games restored**: Games tab's `+` button is now a
+  `PopupMenuButton` with two options — "Import a game (.zip)" (existing,
+  offline) and "Add game by link" (new — a dialog collecting a name + URL,
+  validated as http/https, stored in a new `UserAddedGames` Drift table,
+  played via the same in-app WebView catalog entries already use). New
+  `GameEntry.isUserAdded` bool field distinguishes these from zip-imported
+  `LocalGames` for correct long-press-to-delete routing.
+- Drift schema bumped to v3 (added `UserAddedGames` table, additive-only
+  migration, matching the same pattern as the v1→v2 `LocalGames` addition).
+
+### 3.18 Ekklesia companion character system + real logo (new feature, built)
+Person supplied a real AI-generated logo (green/gold, cross + open Bible +
+dove, "EKKLESIA" wordmark) and 4 character illustrations of the same
+recurring figure in different poses, with a detailed integration spec.
+Built:
+- Processed/cropped/optimized all 5 images (Pillow: tight-cropped
+  transparent backgrounds, resized to reasonable in-app sizes — originals
+  were 1-2MB+ each, now ~100-250KB).
+- `lib/core/widgets/ekklesia_companion.dart` — one reusable
+  `EkklesiaCompanion` widget with 4 semantic types (`welcome`, `bible`,
+  `prayer`, `ai`), mapped to the 4 character images **by their actual pose**
+  (standing/waving/holding-Bible → welcome; seated-with-laptop-and-prompt-bubbles
+  → ai; kneeling-praying → prayer, also reused as the general
+  empty/error-state companion per explicit clarification; seated-reading →
+  bible), with accessibility semantics (localized labels added to all 5
+  ARB files — flagged as functional-but-needing-native-review for
+  yo/ha/ig, same caveat as the prayer fallback templates), an optional
+  subtle floating animation, and an `isDecorative` flag for contexts where
+  adjacent text already conveys the same meaning.
+- Wired in: Home screen's greeting row (Welcome, small/subtle), AI
+  Assistant's empty/new-chat state (AI companion + suggestion chips
+  mirroring the character art's own speech bubbles), Bible screen's
+  auto-import loading state (Bible companion), Sermon Library's
+  empty/error state (Prayer companion, per the "general empty/error state"
+  mapping).
+- Real logo wired into `flutter_launcher_icons`/`flutter_native_splash`
+  config (replacing an earlier Claude-designed placeholder SVG logo, which
+  was fully removed — deleted files, not just unwired, per "do not invent
+  another logo").
+- **Deliberately not done, by design choice, not oversight:** a character
+  on every single screen (spec explicitly said not to — "clean, peaceful,"
+  no overcrowding) and a character directly inside the compact Today's
+  Verse/Prayer cards (would visually compete in an already-tight layout).
+
+### 3.19 Bible import UX (real bug/UX gap, fixed)
+The Bible dataset for every language is **already fully bundled inside the
+app** (`assets/bible/*.json`, several MB each) — "importing" just means
+parsing that bundled JSON once into the local SQLite DB, purely local, no
+network. The original UI required an explicit "tap to import" button/gate
+before showing any content — unnecessary friction for a one-time, fully
+local, unavoidable setup step. Fixed: replaced with a `_AutoImportingView`
+that triggers the import automatically and silently on first open of a
+language, showing just a brief "Setting up your Bible" spinner (now with
+the Bible companion illustration), never a button.
+
+### 3.20 Groq Markdown rendering, TTS/Radio/YouTube hangs, games not appearing, font size (real bugs, fixed)
+Fixed as one batch, from a fresh device screenshot session plus a
+downloaded copy of the actual repo. **Section 3.16's status is now
+resolved, not just re-tested** — the timeout genuinely was still missing
+in the checked-out code.
+
+- **Groq Markdown shown raw everywhere** (`**bold**`, `- ` lists, `#`
+  headers, `| |` tables all visible as literal characters in the AI
+  Assistant chat, Impact Academy summaries, sermon "AI overview," and the
+  Home prayer preview card). Built `lib/core/widgets/markdown_text.dart`
+  — a small hand-written renderer (headers, bold/italic/inline code,
+  bullet/numbered lists, pipe tables), deliberately not a pub.dev package
+  like `flutter_markdown` given there's no local Flutter SDK here to
+  verify an unfamiliar package's API against. Wired into every
+  Groq-output display site found; a `stripMarkdown()` helper handles
+  spots needing a single-line/`maxLines`-truncated preview instead (the
+  Home prayer card, the sermon overview's topic/points), since a
+  block-widget renderer has no single `maxLines` to truncate against.
+- **English TTS "Could not generate audio," very frequently** — real,
+  confirmed bug in `system_tts_engine.dart`: `synthesizeToFile(text,
+  fileName)` was missing `isFullPath: true`. flutter_tts's documented
+  behavior (matches an open upstream issue with the identical symptom):
+  without that flag, Android writes the file to the plugin's *own*
+  internal directory regardless of what "fileName" looks like, while this
+  code was checking for the result in a totally different
+  path_provider-chosen directory — so the exists() check failed almost
+  every time even when synthesis genuinely worked. Fixed by passing the
+  exact same path to both the plugin call and the check.
+- **TTS model download → immediate "could not generate" after
+  downloading** — `TtsModelRegistry` marked a model "ready" once a file
+  existed with non-zero length, which a partial/interrupted download also
+  satisfies. Fixed: downloads now go to `.part` files, renamed to their
+  real names only on full success; a failed download also cleans up any
+  leftover `.part` file so a retry starts clean.
+- **DCLM Radio endless spinner** — confirmed via screenshot: `Tap to Play`
+  spinning forever, never erroring. `RadioService.playLanguage()` had
+  **no timeout at all** on `setAudioSource()`/`play()` in the actual
+  checked-out code, despite 3.16 believing this was already fixed —
+  either lost or never actually landed. Added 15s timeouts back.
+- **YouTube not syncing** — `youtube_repository.dart`'s `http.get()` calls
+  also had no timeout. Network Diagnostics screenshot showed a genuine
+  10s hang against `googleapis.com` specifically while every other host
+  (Groq, the TTS model host, the DCLM stream, even plain `google.com`
+  DNS) answered fine — a pattern consistent with that one host being
+  blocked/throttled by the network or carrier, which isn't fixable
+  client-side. Added a 20s timeout plus an honest, distinguishing message
+  ("YouTube could not be reached — this can happen if it's blocked on the
+  current network") instead of hanging silently forever.
+- **"Add game by link" silently does nothing** — real, high-confidence
+  root cause found in `app_database.dart`'s Drift migration: `onUpgrade`
+  only checked `if (from < 3)` before creating the `UserAddedGames`
+  table. If any earlier build's `schemaVersion` and its actually-shipped
+  tables ever drifted out of sync on a real device (an entirely plausible
+  history across this many iterations), Drift has no way to notice —
+  it only re-runs migrations when the stored version is strictly less
+  than current, never by checking what tables actually exist. Every
+  insert would then fail with a real "no such table" error that nothing
+  was catching in the "Add game by link" dialog specifically (the .zip
+  import path already had proper error handling; the link path didn't).
+  Fixed both: migration now also verifies the table is actually present
+  via `sqlite_master` before trusting the version number, and the dialog
+  now shows a real error message instead of failing silently.
+- **Font size setting** — added a persisted `fontScaleProvider`
+  (`app_settings_service.dart`, same `StateNotifierProvider` pattern as
+  theme/language) applied app-wide via `MaterialApp.router`'s `builder`
+  in `main.dart`. **Important gotcha found along the way**: the Bible
+  reader's verse text uses a raw `RichText`, which — unlike `Text` —
+  does NOT automatically pick up ambient `MediaQuery` text scaling; it
+  needed `textScaler: MediaQuery.textScalerOf(context)` passed explicitly
+  or the whole feature would have silently done nothing on the one
+  screen it was actually requested for. Control surfaced as an "Aa"
+  button on the Bible screen's app bar (a slider, 85%–160%) plus a
+  matching entry in Settings.
+- **Not yet done / worth flagging**: no compiler was available anywhere
+  in this session (same constraint as every prior entry) — all of the
+  above was verified by careful reading, brace/paren balance checks, and
+  cross-referencing flutter_tts's/Drift's actual documented behavior, not
+  by building. Test on a real device before considering these closed,
+  same as every other entry in this log.
+
+---
+
+## 4. Currently Open / Unresolved Issues (in priority order)
+
+1. **TTS fix (3.20) not yet confirmed on a real device.** Root cause
+   (missing `isFullPath: true`) is high-confidence — matches an open
+   flutter_tts upstream issue with the identical symptom exactly — but
+   "high-confidence via reading, no compiler available" is not the same
+   as "tested." Re-test English specifically first; the on-device
+   sherpa_onnx languages (Yoruba/Hausa/Pidgin) share the download-
+   integrity fix but not the `isFullPath` fix (that bug was
+   English/`system_tts_engine.dart`-specific), so if either still fails
+   after 3.20, treat them as separate investigations, not the same bug.
+2. **DCLM Radio fix (3.20) not yet confirmed on a real device.** 3.16's
+   "partially addressed, status unclear" is now resolved to "the timeout
+   genuinely was missing in the actual code, now added" — but still
+   needs a real test, not just a code read.
+3. **YouTube timeout fix (3.20) not yet confirmed.** Even if this
+   surfaces a fast, clear error now instead of hanging, the *underlying*
+   googleapis.com unreachability (if it really is network/carrier-level)
+   is not something a client-side fix can resolve — worth testing on a
+   different network (e.g. WiFi vs. the mobile carrier used for the
+   original screenshots) to confirm or rule that out.
+4. **"Add game by link" fix (3.20) not yet confirmed.** The root-cause
+   theory (schema version vs. actual tables drifting out of sync across
+   some earlier build) is plausible and the self-healing migration is a
+   reasonable defensive fix regardless of whether that exact history is
+   correct, but it's still a theory, not a confirmed diagnosis — if games
+   added by link still don't appear after this, the real error message
+   will now actually surface (it no longer fails silently), which should
+   make the next investigation much faster.
+5. **`parseBibleReference()` only supports English book names** — bookmarks/
+   search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
+   to parse when jumped back to. Known, not yet fixed.
+6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+   that definitely includes that commit — last status check was "not sure
+   if this build has the fix yet."
+7. **Per-verse TTS + synchronized highlight during audio playback** —
+   explicitly requested (the person wants the specific verse currently
+   being read aloud to highlight in real time, meaning TTS needs to
+   generate/play per-verse rather than as one whole-chapter blob) — **not
+   started at all.**
+8. **Translations needing native-speaker review** (functional, not
+   verified for naturalness/accuracy): the 5 companion accessibility
+   labels per non-English language, and the prayer fallback templates for
+   yo/ha/ig/pcm (3.8).
+9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+   reference screenshot's own "Tap or Drag" label, so treated as
+   acceptable, not a bug).
+
+## 5. Confirmed-Working / Closed Issues (do not re-investigate these)
+
+- CI pipeline: format/fix, analyze, dependency check, security scan, and
+  release build all pass end-to-end (as of the last full green run).
+- Real signed APK/AAB builds successfully producing installable output.
+- Systemic dark-mode bug (3.6) — fixed across all 9 files, verified no
+  remaining instances via exhaustive scan.
+- Bottom nav / shell navigation (3.7) — fixed, 5 tabs including Games.
+- Multi-language Bible/Prayer content (3.8) — fixed at the code level (verse
+  and prayer text now genuinely vary by language); the *Igbo/Yoruba locale
+  crash* was a **separate, additional** bug (3.9) layered on top, also
+  fixed but not yet re-confirmed (see Section 4, item 4).
+- Groq model IDs updated to non-deprecated ones (3.11) — **not yet
+  confirmed working on a real device**, but the root cause is confirmed
+  with high confidence via Groq's own official deprecation announcement.
+- Raw-exception-in-UI pattern — fixed in every location found so far
+  (3.12), but given how many times new instances have been found, do not
+  assume this is fully eliminated without a fresh grep.
+- Bible reading UI redesign + verse-jump-with-blink (3.13) — built,
+  reasonably confident, not yet re-confirmed visually on latest build.
+- AI conversation history + prayer auto-send (3.14) — built, not yet
+  confirmed on device.
+- Bible Quiz game + URL-based games (3.17) — built, not yet confirmed on
+  device.
+- Companion character system + real logo (3.18) — built, not yet confirmed
+  visually on device.
+- Bible auto-import UX (3.19) — fixed, matches "remove that import
+  requirement" request directly.
+- Network Diagnostics tool itself (3.10) — both known bugs in the tool are
+  fixed; the tool's *results* should now be trustworthy for future
+  debugging.
+- Groq Markdown now rendered properly everywhere it was found being shown
+  raw (3.20) — AI Assistant chat, Impact Academy, sermon "AI overview,"
+  Home prayer preview. Code-level fix is straightforward and low-risk
+  (a self-contained rendering widget, no new dependency); not yet visually
+  confirmed on device but low concern relative to the other 3.20 items.
+- Font size setting (3.20) — built, including the `RichText`
+  ambient-scaling gotcha fix specifically for the Bible reader; not yet
+  confirmed on device.
+
+---
+
+## 6. Sensitive Data Handling Note
+
+At one point the person pasted a real base64-encoded Android release
+keystore and a real keystore password directly into chat. Both were
+treated as **compromised on exposure** — the person was advised to
+regenerate a fresh keystore with a new password rather than continue using
+the exposed one, and to use their phone's Files app (not terminal
+copy/screenshot) to move sensitive values into GitHub Secrets going
+forward. If continuing this project, do not ask for or repeat back
+keystore contents, API keys, or passwords in chat under any circumstances
+— guide the person to paste secrets directly into GitHub's secret input
+fields instead.
+
+---
+
+*End of handoff document. Written to be self-contained — a fresh session
+with this file plus a current repo checkout should not need to re-derive
+any of the above from scratch.*

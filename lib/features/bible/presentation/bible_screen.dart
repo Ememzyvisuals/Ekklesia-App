@@ -22,6 +22,7 @@ import '../data/bible_repository.dart';
 import '../data/bible_tts_queue.dart';
 import 'voice_download_sheet.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
+import '../../../core/services/app_settings_service.dart';
 
 enum _View { books, chapters, verses }
 
@@ -474,6 +475,16 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                 ),
         ),
         actions: [
+          // Font-size control — the specific, named request was making
+          // the Bible easier to read for older users. Placed here
+          // rather than only in Settings since this is the screen it
+          // actually matters for; Settings also gets a quick entry for
+          // people who'd rather find it there.
+          IconButton(
+            icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
+            tooltip: 'Text size',
+            onPressed: () => _showFontSizeSheet(context),
+          ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: bibleLanguage,
@@ -871,6 +882,15 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   color: highlightColor,
                   padding: const EdgeInsets.symmetric(vertical: 7),
                   child: RichText(
+                    // RichText, unlike Text, does NOT automatically pick
+                    // up ambient text scaling from MediaQuery — it needs
+                    // textScaler passed explicitly. Without this line,
+                    // the font-size preference wired into MaterialApp's
+                    // builder in main.dart would silently have no effect
+                    // here specifically, which would have been a real
+                    // problem given the Bible reader is the actual,
+                    // named reason that setting exists.
+                    textScaler: MediaQuery.textScalerOf(context),
                     text: TextSpan(
                       // Serves the same "elegant reading" role as a
                       // reference Bible app's serif body text — Outfit
@@ -915,6 +935,68 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showFontSizeSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => Consumer(
+        builder: (sheetContext, ref, _) {
+          final scale = ref.watch(fontScaleProvider);
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Text size',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: AppTheme.textPrimary(sheetContext))),
+                const SizedBox(height: 4),
+                Text(
+                  'Applies across the whole app, not just the Bible.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary(sheetContext)),
+                ),
+                const SizedBox(height: 16),
+                // A live preview line, scaled the same way the actual
+                // Bible text is (Text picks up ambient MediaQuery
+                // scaling automatically) — so the effect is visible
+                // immediately, before closing the sheet.
+                Text(
+                  'In the beginning God created the heaven and the earth.',
+                  style: TextStyle(
+                      fontFamily: 'Outfit',
+                      color: AppTheme.textPrimary(sheetContext)),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('A', style: TextStyle(fontSize: 14)),
+                    Expanded(
+                      child: Slider(
+                        value: scale,
+                        min: AppSettingsService.minFontScale,
+                        max: AppSettingsService.maxFontScale,
+                        divisions: 15,
+                        label: '${(scale * 100).round()}%',
+                        onChanged: (value) => ref
+                            .read(fontScaleProvider.notifier)
+                            .setScale(value),
+                      ),
+                    ),
+                    const Text('A', style: TextStyle(fontSize: 24)),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

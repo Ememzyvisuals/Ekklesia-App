@@ -194,6 +194,7 @@ class EkklesiaApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final language = ref.watch(languageProvider);
+    final fontScale = ref.watch(fontScaleProvider);
 
     return MaterialApp.router(
       title: 'Ekklesia',
@@ -210,6 +211,27 @@ class EkklesiaApp extends ConsumerWidget {
         _FallbackWidgetsLocalizationsDelegate(),
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      // Applies the font-size preference (fontScaleProvider, set from
+      // the Bible screen's "Aa" control or Settings) to every screen in
+      // the app at once, rather than each screen having to remember to
+      // read it individually — the specific, named request was making
+      // the Bible easier to read for older users, and text-scaling the
+      // whole app is both simpler to implement correctly and more
+      // consistent than a Bible-only special case would have been.
+      // MediaQuery.withClampedTextScaling isn't used here because it
+      // multiplies against the OS's own accessibility text-scale
+      // setting; TextScaler.linear replaces it outright, which is the
+      // right behavior for an in-app preference the person sets
+      // directly rather than one meant to layer on top of system
+      // settings.
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(fontScale),
+          ),
+          child: child!,
+        );
+      },
     );
   }
 }

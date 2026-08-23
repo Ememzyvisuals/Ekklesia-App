@@ -48,6 +48,26 @@ class SystemTtsEngine {
   /// out. A bounded timeout with a real error is infinitely better than
   /// an unbounded hang: at worst it's a wrong-but-fast failure that lets
   /// someone retry.
+  ///
+  /// Second, separate, real bug found and fixed here: `synthesizeToFile`'s
+  /// second argument is documented by flutter_tts as a bare file NAME,
+  /// not a path — its third, optional `isFullPath` argument defaults to
+  /// `false`, and when false, the plugin's own native Android code
+  /// resolves that "name" against ITS OWN internal directory
+  /// (`context.getExternalFilesDir(null)`), completely ignoring whatever
+  /// directory this Dart code assumes. This file was passing a bare
+  /// `fileName` and then checking for the result at
+  /// `p.join(outDir.path, fileName)` — `outDir` being path_provider's
+  /// temporary/cache directory, a different directory than where
+  /// flutter_tts actually wrote the file. That mismatch meant the
+  /// `outFile.exists()` check below almost always failed even when
+  /// synthesis genuinely succeeded, which is why "Could not generate
+  /// audio" was reported happening "very frequently" for English —
+  /// confirmed against flutter_tts's own issue tracker (a report showing
+  /// the exact same "trying to combine the path I gave it to the
+  /// internal path" symptom). Fixed by passing `isFullPath: true` and
+  /// handing the plugin the exact path this code already computes and
+  /// later checks, so both sides agree on where the file lives.
   Future<String> synthesizeToFile(String text) async {
     await _ensureConfigured();
 
@@ -55,6 +75,7 @@ class SystemTtsEngine {
     final outDir = Directory(p.join(cacheDir.path, 'tts_output'));
     if (!await outDir.exists()) await outDir.create(recursive: true);
     final fileName = 'eng_${DateTime.now().microsecondsSinceEpoch}.wav';
+    final outPath = p.join(outDir.path, fileName);
 
     try {
       // Long text (a full chapter) genuinely takes real synthesis time
@@ -62,13 +83,12 @@ class SystemTtsEngine {
       // without leaving a person staring at a spinner indefinitely on
       // the actual failure case.
       await _flutterTts
-          .synthesizeToFile(text, fileName)
+          .synthesizeToFile(text, outPath, true)
           .timeout(const Duration(seconds: 45));
     } on TimeoutException {
       throw const SystemTtsTimeoutException();
     }
 
-    final outPath = p.join(outDir.path, fileName);
     final outFile = File(outPath);
     if (!await outFile.exists() || await outFile.length() == 0) {
       // The completion callback fired (so we got past the timeout) but

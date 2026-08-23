@@ -424,16 +424,39 @@ class AppDatabase extends _$AppDatabase {
           // v1 -> v2: added LocalGames (offline-imported game bundles).
           // Every other table is untouched — additive only, no existing
           // user data (bookmarks, notes, Bible progress, etc.) is at risk.
-          if (from < 2) {
+          //
+          // Each check below also falls back to actually looking for the
+          // table on disk (not just trusting `from`) — a real,
+          // reproducible failure mode found while investigating "added
+          // games don't show up": if any earlier build's `schemaVersion`
+          // ever got bumped without its matching `createTable` call
+          // actually shipping (or a person's install history otherwise
+          // left `schemaVersion` ahead of what tables really exist), a
+          // pure `from < N` check silently never runs again on later
+          // upgrades — Drift only invokes onUpgrade when the stored
+          // version is strictly less than the current one, so it has no
+          // other way to notice a table is still missing. Every insert
+          // into that table then fails with a real "no such table" error
+          // that nothing was catching, which from the person's side just
+          // looks like "I added it and nothing happened."
+          if (from < 2 || !await _tableExists('local_games')) {
             await m.createTable(localGames);
           }
           // v2 -> v3: added UserAddedGames (URL-added games) — same
-          // additive-only guarantee.
-          if (from < 3) {
+          // additive-only guarantee, same self-healing fallback.
+          if (from < 3 || !await _tableExists('user_added_games')) {
             await m.createTable(userAddedGames);
           }
         },
       );
+
+  Future<bool> _tableExists(String name) async {
+    final row = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(name)],
+    ).getSingleOrNull();
+    return row != null;
+  }
 }
 
 /// Plain singleton accessor, mirroring IsarService's pattern — used by

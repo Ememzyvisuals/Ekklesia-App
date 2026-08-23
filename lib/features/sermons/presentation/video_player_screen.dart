@@ -8,6 +8,7 @@ import '../../bookmarks/presentation/bookmark_button.dart';
 import '../../bookmarks/domain/bookmark_item.dart';
 import '../data/message_overview_service.dart';
 import '../domain/video_entry.dart';
+import '../../../core/widgets/markdown_text.dart';
 
 /// Watch screen for a single message/program.
 ///
@@ -208,13 +209,18 @@ class _OverviewSection extends StatelessWidget {
               Text('Topic',
                   style: AppTypography.bodySmall(
                       color: AppTheme.textSecondary(context))),
-              Text(overview.topic,
+              Text(stripMarkdown(overview.topic),
                   style: AppTypography.bodyLarge(
                       color: AppTheme.textPrimary(context))),
               const SizedBox(height: 12),
-              Text(overview.summary,
-                  style: AppTypography.bodyMedium(
-                      color: AppTheme.textPrimary(context))),
+              // Same Groq-Markdown issue as the AI Assistant chat and
+              // Impact Academy — this field comes back from the same
+              // Groq call, so it can carry the same `**`/`- ` syntax.
+              MarkdownText(
+                overview.summary,
+                baseStyle: AppTypography.bodyMedium(
+                    color: AppTheme.textPrimary(context)),
+              ),
               if (overview.pointsToConsider.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text('Points to consider',
@@ -228,7 +234,7 @@ class _OverviewSection extends StatelessWidget {
                         children: [
                           const Text('•  '),
                           Expanded(
-                              child: Text(p,
+                              child: Text(stripMarkdown(p),
                                   style: AppTypography.bodyMedium(
                                       color: AppTheme.textPrimary(context)))),
                         ],

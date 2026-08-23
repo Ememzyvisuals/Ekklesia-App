@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/message_repository.dart';
 import '../../../core/services/groq_service.dart';
 import '../../../core/config/app_theme.dart';
+import '../../../core/widgets/markdown_text.dart';
 import 'quiz_screen.dart';
 
 /// Impact Academy — local, Drift-backed archive seeded from the bundled
@@ -176,10 +177,16 @@ class _MessageTileState extends State<_MessageTile> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_summary != null) ...[
-                    const Text('Summary',
+                    Text('Summary',
                         style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text(_summary!),
+                    // Was Text(_summary!) — showed Groq's raw Markdown
+                    // (the **bold**/`- ` list markers visible in the
+                    // Impact Academy screenshots) straight to the user.
+                    MarkdownText(
+                      _summary!,
+                      baseStyle: TextStyle(color: AppTheme.textPrimary(context)),
+                    ),
                     const SizedBox(height: 12),
                   ],
                   if (_generating)
