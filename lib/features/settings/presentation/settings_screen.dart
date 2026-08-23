@@ -124,7 +124,8 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.text_fields),
             title: const Text('Text size'),
-            subtitle: Text('${(ref.watch(fontScaleProvider) * 100).round()}% — applies app-wide'),
+            subtitle: Text(
+                '${(ref.watch(fontScaleProvider) * 100).round()}% — applies app-wide'),
             trailing: const Icon(Icons.chevron_right),
             // Same control as the Bible screen's "Aa" button — added
             // here too since not everyone will find it on the Bible

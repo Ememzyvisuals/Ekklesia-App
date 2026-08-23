@@ -270,7 +270,8 @@ class _GamesScreenState extends State<GamesScreen> {
     await _addGameByUrl(title: title, url: rawUrl);
   }
 
-  Future<void> _addGameByUrl({required String title, required String url}) async {
+  Future<void> _addGameByUrl(
+      {required String title, required String url}) async {
     try {
       await UserAddedGamesRepository.instance.insert(title: title, url: url);
       if (!mounted) return;

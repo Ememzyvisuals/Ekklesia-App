@@ -259,8 +259,8 @@ class MarkdownText extends StatelessWidget {
         var j = i;
         while (j < lines.length &&
             RegExp(r'^[-*\u2022]\s+').hasMatch(lines[j].trim())) {
-          items.add(
-              lines[j].trim().replaceFirst(RegExp(r'^[-*\u2022]\s+'), ''));
+          items
+              .add(lines[j].trim().replaceFirst(RegExp(r'^[-*\u2022]\s+'), ''));
           j++;
         }
         blocks.add(_BulletListBlock(items: items));
@@ -373,8 +373,7 @@ String stripMarkdown(String input) {
     (m) => m.group(1)!.split('|').map((c) => c.trim()).join(' - '),
   );
   out = out.replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
-  out =
-      out.replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m.group(1) ?? '');
+  out = out.replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m.group(1) ?? '');
   out = out.replaceAllMapped(RegExp(r'__(.+?)__'), (m) => m.group(1) ?? '');
   out = out.replaceAllMapped(
       RegExp(r'(?<![\w*])\*(?!\*)(.+?)\*(?!\*)'), (m) => m.group(1) ?? '');

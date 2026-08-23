@@ -44,8 +44,8 @@ class _LearnScreenState extends State<LearnScreen> {
       // the UI, same class of bug already fixed on the AI/Live/Bible
       // screens but missed here. This is a local read, not a network
       // call, so a generic message fits every real failure mode.
-      setState(() =>
-          _error = 'Could not load Impact Academy content. Try again.');
+      setState(
+          () => _error = 'Could not load Impact Academy content. Try again.');
     } finally {
       setState(() => _loading = false);
     }
@@ -177,7 +177,7 @@ class _MessageTileState extends State<_MessageTile> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_summary != null) ...[
-                    Text('Summary',
+                    const Text('Summary',
                         style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     // Was Text(_summary!) — showed Groq's raw Markdown
@@ -185,7 +185,8 @@ class _MessageTileState extends State<_MessageTile> {
                     // Impact Academy screenshots) straight to the user.
                     MarkdownText(
                       _summary!,
-                      baseStyle: TextStyle(color: AppTheme.textPrimary(context)),
+                      baseStyle:
+                          TextStyle(color: AppTheme.textPrimary(context)),
                     ),
                     const SizedBox(height: 12),
                   ],
