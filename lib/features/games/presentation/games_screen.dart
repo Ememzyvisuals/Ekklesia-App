@@ -53,14 +53,14 @@ class _GamesScreenState extends State<GamesScreen> {
     if (!mounted) return;
     switch (bundledResult) {
       case ResultSuccess(data: final bundled):
-        setState(() => _result = Result.success(
-            [...localGames, ...userAddedGames, ...bundled]));
+        setState(() => _result =
+            Result.success([...localGames, ...userAddedGames, ...bundled]));
       case ResultFailure():
         // Bundled catalog failed to load (shouldn't normally happen, it's
         // a bundled asset) — still show whatever local/added games exist
         // instead of blocking the whole screen on an unrelated failure.
-        setState(() =>
-            _result = Result.success([...localGames, ...userAddedGames]));
+        setState(
+            () => _result = Result.success([...localGames, ...userAddedGames]));
       case ResultLoading():
         break;
     }
@@ -191,8 +191,7 @@ class _GamesScreenState extends State<GamesScreen> {
             // reachable from Home's category grid.
             Padding(
               padding: const EdgeInsets.all(16),
-              child: _BibleQuizCard(
-                  onTap: () => context.push('/bible-quiz')),
+              child: _BibleQuizCard(onTap: () => context.push('/bible-quiz')),
             ),
             switch (_result) {
               ResultLoading() => const Padding(
@@ -233,16 +232,15 @@ class _GamesScreenState extends State<GamesScreen> {
             TextField(
               controller: urlController,
               decoration: const InputDecoration(
-                  labelText: 'Game URL',
-                  hintText: 'https://example.com/game'),
+                  labelText: 'Game URL', hintText: 'https://example.com/game'),
               keyboardType: TextInputType.url,
             ),
             const SizedBox(height: 8),
             Text(
               'This game loads directly from that link and needs '
               'internet to play, unlike an imported .zip game.',
-              style: TextStyle(
-                  fontSize: 12, color: AppTheme.textSecondary(ctx)),
+              style:
+                  TextStyle(fontSize: 12, color: AppTheme.textSecondary(ctx)),
             ),
           ],
         ),
@@ -265,8 +263,7 @@ class _GamesScreenState extends State<GamesScreen> {
         !(uri.isScheme('http') || uri.isScheme('https'))) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Enter a name and a valid http/https link.')));
+            content: Text('Enter a name and a valid http/https link.')));
       }
       return;
     }
@@ -308,8 +305,7 @@ class _BibleQuizCard extends StatelessWidget {
                             fontSize: 16)),
                     SizedBox(height: 2),
                     Text('Fill in the verse. Test your knowledge.',
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 12)),
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ],
                 ),
               ),

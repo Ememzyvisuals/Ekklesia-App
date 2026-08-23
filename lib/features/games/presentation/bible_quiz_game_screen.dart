@@ -76,9 +76,9 @@ class _BibleQuizGameScreenState extends State<BibleQuizGameScreen> {
 
   void _checkAnswer() {
     final q = _round[_questionIndex];
-    final correct = List.generate(
-            q.answers.length, (i) => _filledBlanks[i] == q.answers[i])
-        .every((ok) => ok);
+    final correct =
+        List.generate(q.answers.length, (i) => _filledBlanks[i] == q.answers[i])
+            .every((ok) => ok);
     setState(() {
       _questionLocked = true;
       if (correct) _score++;
@@ -153,8 +153,7 @@ class _BibleQuizGameScreenState extends State<BibleQuizGameScreen> {
             const SizedBox(height: 16),
             Text(
               '$_score / $total',
-              style:
-                  const TextStyle(fontSize: 40, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(message,
@@ -182,10 +181,7 @@ class _BibleQuizGameScreenState extends State<BibleQuizGameScreen> {
         .map((m) => int.parse(m.group(1)!))
         .toList();
     final allCorrect = !_filledBlanks.contains(null) &&
-        _filledBlanks
-            .asMap()
-            .entries
-            .every((e) => e.value == q.answers[e.key]);
+        _filledBlanks.asMap().entries.every((e) => e.value == q.answers[e.key]);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -323,8 +319,7 @@ class _WordTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border:
-                Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
           ),
           child: Text(word, style: const TextStyle(fontSize: 15)),
         ),

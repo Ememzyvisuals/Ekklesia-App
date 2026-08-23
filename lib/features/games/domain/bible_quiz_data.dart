@@ -30,8 +30,7 @@ class BibleQuizQuestion {
 const List<BibleQuizQuestion> kBibleQuizQuestions = [
   BibleQuizQuestion(
     reference: 'John 3:16',
-    template:
-        'For God so {0} the world, that he gave his only begotten {1}, '
+    template: 'For God so {0} the world, that he gave his only begotten {1}, '
         'that whosoever believeth in him should not perish, but have '
         'everlasting {2}.',
     answers: ['loved', 'Son', 'life'],
@@ -51,24 +50,21 @@ const List<BibleQuizQuestion> kBibleQuizQuestions = [
   ),
   BibleQuizQuestion(
     reference: 'Romans 8:28',
-    template:
-        'And we know that all things work together for {0} to them that '
+    template: 'And we know that all things work together for {0} to them that '
         'love God, to them who are the called according to his {1}.',
     answers: ['good', 'purpose'],
     decoys: ['ill', 'glory', 'plan'],
   ),
   BibleQuizQuestion(
     reference: 'Proverbs 3:5',
-    template:
-        'Trust in the LORD with all thine {0}; and lean not unto thine '
+    template: 'Trust in the LORD with all thine {0}; and lean not unto thine '
         'own {1}.',
     answers: ['heart', 'understanding'],
     decoys: ['soul', 'wisdom', 'strength'],
   ),
   BibleQuizQuestion(
     reference: 'Joshua 1:9',
-    template:
-        'Have not I commanded thee? Be strong and of a good {0}; be not '
+    template: 'Have not I commanded thee? Be strong and of a good {0}; be not '
         'afraid, neither be thou {1}.',
     answers: ['courage', 'dismayed'],
     decoys: ['heart', 'discouraged', 'silent'],
@@ -97,24 +93,21 @@ const List<BibleQuizQuestion> kBibleQuizQuestions = [
   ),
   BibleQuizQuestion(
     reference: 'Isaiah 40:31',
-    template:
-        'But they that wait upon the LORD shall renew their {0}; they '
+    template: 'But they that wait upon the LORD shall renew their {0}; they '
         'shall mount up with wings as eagles.',
     answers: ['strength'],
     decoys: ['hope', 'faith', 'joy'],
   ),
   BibleQuizQuestion(
     reference: '1 Corinthians 13:13',
-    template:
-        'And now abideth faith, hope, {0}, these three; but the greatest '
+    template: 'And now abideth faith, hope, {0}, these three; but the greatest '
         'of these is {1}.',
     answers: ['charity', 'charity'],
     decoys: ['love', 'grace', 'peace'],
   ),
   BibleQuizQuestion(
     reference: 'Jeremiah 29:11',
-    template:
-        'For I know the thoughts that I think toward you, saith the '
+    template: 'For I know the thoughts that I think toward you, saith the '
         'LORD, thoughts of {0}, and not of evil, to give you an expected '
         '{1}.',
     answers: ['peace', 'end'],
@@ -122,23 +115,20 @@ const List<BibleQuizQuestion> kBibleQuizQuestions = [
   ),
   BibleQuizQuestion(
     reference: 'Ephesians 2:8',
-    template:
-        'For by grace are ye saved through {0}; and that not of '
+    template: 'For by grace are ye saved through {0}; and that not of '
         'yourselves: it is the gift of {1}:',
     answers: ['faith', 'God'],
     decoys: ['works', 'man', 'love'],
   ),
   BibleQuizQuestion(
     reference: 'Psalm 46:1',
-    template:
-        'God is our refuge and {0}, a very present help in {1}.',
+    template: 'God is our refuge and {0}, a very present help in {1}.',
     answers: ['strength', 'trouble'],
     decoys: ['shield', 'peace', 'need'],
   ),
   BibleQuizQuestion(
     reference: 'Matthew 28:19',
-    template:
-        'Go ye therefore, and teach all nations, baptizing them in the '
+    template: 'Go ye therefore, and teach all nations, baptizing them in the '
         'name of the Father, and of the {0}, and of the Holy {1}:',
     answers: ['Son', 'Ghost'],
     decoys: ['Lamb', 'Spirit', 'Word'],

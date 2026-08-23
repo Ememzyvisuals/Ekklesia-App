@@ -268,10 +268,9 @@ class _FallbackCupertinoLocalizationsDelegate
 
   @override
   Future<CupertinoLocalizations> load(Locale locale) {
-    final effective =
-        GlobalCupertinoLocalizations.delegate.isSupported(locale)
-            ? locale
-            : const Locale('en');
+    final effective = GlobalCupertinoLocalizations.delegate.isSupported(locale)
+        ? locale
+        : const Locale('en');
     return GlobalCupertinoLocalizations.delegate.load(effective);
   }
 
