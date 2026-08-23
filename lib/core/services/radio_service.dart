@@ -61,7 +61,7 @@ class RadioService {
         tag: MediaItem(
           id: url,
           album: 'DCLM Radio',
-          title: 'DCLM Radio — ${_displayName(languageKey)}',
+          title: 'DCLM Radio: ${_displayName(languageKey)}',
           // Station art — real DCLM branding (Deeper Life Bible Church's
           // own emblem), not a placeholder: pulled directly from the
           // official radio.dclm.org web player's own default now-playing

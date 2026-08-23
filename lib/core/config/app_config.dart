@@ -155,8 +155,15 @@ class AppConfig {
   // unavailable. AIConfig.instance.verify() checks the live model list
   // directly against Groq's own API (using the user's key) at startup
   // and switches automatically — see ai_config.dart.
-  static const String groqPreferredModel = 'llama-3.3-70b-versatile';
-  static const String groqFallbackModel = 'llama-3.1-8b-instant';
+  // Groq officially deprecated both of the models previously configured
+  // here (llama-3.3-70b-versatile, llama-3.1-8b-instant) on June 17,
+  // 2026 — confirmed directly against Groq's own deprecations page,
+  // which names these exact two replacements. Every Groq call this app
+  // made was very likely hitting a `model_decommissioned` error since
+  // that date — confirmed on a real device: adding a valid personal key
+  // still produced "something went wrong" on every request.
+  static const String groqPreferredModel = 'openai/gpt-oss-120b';
+  static const String groqFallbackModel = 'openai/gpt-oss-20b';
   static const List<String> groqSupportedModels = [
     groqPreferredModel,
     groqFallbackModel,

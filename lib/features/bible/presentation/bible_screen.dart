@@ -135,8 +135,12 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         ),
       );
       unawaited(annotations.recordReadingActivity());
-    } catch (e) {
-      setState(() => _error = e.toString());
+    } catch (_) {
+      // Same raw-exception-dump bug found and fixed elsewhere in this
+      // file/session — a local read failure here, so a generic message
+      // covers every real cause.
+      setState(
+          () => _error = 'Could not open that chapter. Try again.');
     } finally {
       setState(() => _loadingVerses = false);
     }
@@ -171,7 +175,14 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        // BibleReferenceException carries its own clear message (e.g.
+        // "Genesis not found. Is this language imported?") — worth
+        // keeping, just stripped of the raw "BibleReferenceException:"
+        // type prefix. Anything else falls back to a generic message
+        // rather than whatever raw exception text came through.
+        _error = e is BibleReferenceException
+            ? e.message
+            : 'Could not find that reference. Check the spelling and try again.';
         _loadingVerses = false;
       });
     }
@@ -191,7 +202,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           targetContext,
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeInOut,
-          alignment: 0.3, // lands roughly a third down the screen, not glued to the very top
+          alignment:
+              0.3, // lands roughly a third down the screen, not glued to the very top
         );
       }
       if (!mounted) return;
@@ -203,8 +215,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       });
       var toggleCount = 0;
       const totalToggles = 6; // 3 full on/off blinks
-      _blinkTimer =
-          Timer.periodic(const Duration(milliseconds: 350), (timer) {
+      _blinkTimer = Timer.periodic(const Duration(milliseconds: 350), (timer) {
         if (!mounted) {
           timer.cancel();
           return;
@@ -841,8 +852,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                   ),
                 );
               }
-              final isBlinking =
-                  _blinkVerseNumber == v.number && _blinkVisible;
+              final isBlinking = _blinkVerseNumber == v.number && _blinkVisible;
               final highlightColor = isBlinking
                   ? AppColors.accent.withValues(alpha: 0.55)
                   : _highlights[v.number] != null
@@ -1290,19 +1300,19 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
         ),
       );
     }
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const EkklesiaCompanion(
+          EkklesiaCompanion(
             type: EkklesiaCompanionType.bible,
             width: 110,
             isDecorative: true, // the text label below already says it
           ),
-          const SizedBox(height: 8),
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          const Text('Setting up your Bible'),
+          SizedBox(height: 8),
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Setting up your Bible'),
         ],
       ),
     );

@@ -91,7 +91,7 @@ class TtsModelRegistry {
         language: mmsCode,
         status: TtsModelDownloadStatus.error,
         errorMessage:
-            'No on-device model exists for "$mmsCode" — see AppConfig\'s '
+            'No on-device model exists for "$mmsCode". See AppConfig\'s '
             'mmsOnnxAvailableLanguages doc comment for what was actually '
             'confirmed available.',
       ));

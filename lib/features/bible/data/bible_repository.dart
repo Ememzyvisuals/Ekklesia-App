@@ -113,7 +113,7 @@ class BibleRepository {
     );
     if (verses.isEmpty) {
       throw BibleReferenceException(
-        '"$reference" not found in language "$language" — is this language imported, '
+        '"$reference" not found in language "$language". Is this language imported, '
         'and does ${parsed.book.englishName} ${parsed.chapter} exist?',
       );
     }

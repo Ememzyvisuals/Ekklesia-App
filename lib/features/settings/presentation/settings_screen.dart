@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/services/ai_config.dart';
 import '../../../core/services/app_settings_service.dart';
 import '../../../core/services/groq_providers.dart';
 import '../../../core/services/user_groq_key_service.dart';
@@ -33,10 +36,10 @@ class SettingsScreen extends ConsumerWidget {
   // for the full record of what was tried.
   static const _languages = [
     ('english', 'English (device voice)'),
-    ('hausa', 'Hausa (offline voice — download required)'),
+    ('hausa', 'Hausa (offline voice, download required)'),
     ('igbo', 'Igbo (no voice available)'),
-    ('pidgin', 'Pidgin (offline voice — download required)'),
-    ('yoruba', 'Yoruba (offline voice — download required)'),
+    ('pidgin', 'Pidgin (offline voice, download required)'),
+    ('yoruba', 'Yoruba (offline voice, download required)'),
   ];
 
   @override
@@ -308,6 +311,17 @@ class SettingsScreen extends ConsumerWidget {
                   }
                   await UserGroqKeyService.instance.setKey(value);
                   ref.invalidate(userGroqKeyProvider);
+                  // Was missing entirely — AIConfig.verify() only ever
+                  // ran once, at app startup, before this key existed.
+                  // Confirmed on a real device: adding a valid key here
+                  // still produced "something went wrong" on every AI
+                  // request afterward, because the model selection
+                  // AIConfig computed at boot (with no key at all) was
+                  // never recomputed. Not awaited — Settings shouldn't
+                  // block on a network round trip just to close this
+                  // dialog; the AI screen's own request path already
+                  // has its own timeout/retry handling.
+                  unawaited(AIConfig.instance.verify());
                   if (context.mounted) Navigator.pop(context);
                 },
                 child: Text(l10n.commonSave),

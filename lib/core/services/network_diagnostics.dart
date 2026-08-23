@@ -97,7 +97,56 @@ class NetworkDiagnostics {
     } catch (e) {
       sw.stop();
       return DiagnosticResult(
-          name: name, ok: false, detail: e.toString(), durationMs: sw.elapsedMilliseconds);
+          name: name,
+          ok: false,
+          detail: e.toString(),
+          durationMs: sw.elapsedMilliseconds);
+    }
+  }
+
+  /// For a URL that's a continuous stream (a live radio feed, in
+  /// particular) rather than a normal finite HTTP response —
+  /// `http.get()` waits for the full response body to finish, which a
+  /// live stream never does by design, so it was guaranteed to time out
+  /// after exactly the configured duration regardless of whether the
+  /// stream was actually healthy. Confirmed by testing: this produced
+  /// the exact same "TimeoutException after 0:00:10" result whether
+  /// the stream was reachable or not, making the check meaningless.
+  ///
+  /// This instead opens the connection and inspects only the response
+  /// headers/status (available as soon as the server starts replying,
+  /// before any audio body streams down) via `Client.send()`'s
+  /// `StreamedResponse`, then closes the connection immediately without
+  /// ever reading the (endless) body.
+  Future<DiagnosticResult> _checkStreamReachable(
+      String name, String url) async {
+    final sw = Stopwatch()..start();
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(url));
+      final streamedResponse =
+          await client.send(request).timeout(const Duration(seconds: 10));
+      sw.stop();
+      // Deliberately not awaiting/draining streamedResponse.stream — for
+      // a live stream that body never ends, and we already have what we
+      // need (the status code) the moment headers arrive.
+      return DiagnosticResult(
+        name: name,
+        ok: streamedResponse.statusCode >= 200 &&
+            streamedResponse.statusCode < 400,
+        detail: 'HTTP ${streamedResponse.statusCode} '
+            '(stream connection opened successfully)',
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+      return DiagnosticResult(
+          name: name,
+          ok: false,
+          detail: e.toString(),
+          durationMs: sw.elapsedMilliseconds);
+    } finally {
+      client.close();
     }
   }
 
@@ -129,13 +178,24 @@ class NetworkDiagnostics {
   Stream<DiagnosticResult> runAll() async* {
     yield await _checkRawConnectivity();
     yield await _checkGroqKey();
+    // Was missing the Authorization header entirely, so this always
+    // tested anonymous access to a protected endpoint — guaranteed
+    // HTTP 401 regardless of whether the person's actual key is valid,
+    // which is a meaningless result to show someone debugging "is my
+    // key working." Now sends the real configured key, the same way
+    // groq_service.dart's actual chat requests do, so a 401 here
+    // genuinely means the key itself was rejected.
+    final groqKey = await UserGroqKeyService.instance.getKey();
     yield await _checkHttps(
-        'Groq API (api.groq.com)', 'https://api.groq.com/openai/v1/models');
+      'Groq API (api.groq.com)',
+      'https://api.groq.com/openai/v1/models',
+      headers: groqKey != null ? {'Authorization': 'Bearer $groqKey'} : null,
+    );
     yield await _checkHttps('YouTube Data API (googleapis.com)',
         'https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${AppConfig.youtubeApiKey}');
     yield await _checkHttps('TTS model host (huggingface.co)',
         'https://huggingface.co/Axiveri/Renpiper-mms-onnx-V1/resolve/main');
-    yield await _checkHttps(
+    yield await _checkStreamReachable(
         'DCLM radio stream host (airtime.dclm.org)',
         AppConfig.dclmStreams['english']!);
   }

@@ -160,7 +160,7 @@ class DownloadWorker {
       final digest = await _sha256Of(partFile);
       if (digest != task.expectedSha256) {
         task.status = DownloadStatus.failed;
-        task.errorMessage = 'Checksum mismatch — file may be corrupted.';
+        task.errorMessage = 'Checksum mismatch. File may be corrupted.';
         await partFile.delete();
         await _persist(task);
         return;

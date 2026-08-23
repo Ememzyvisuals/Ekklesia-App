@@ -18,7 +18,7 @@ class GroqMessage {
 class GroqKeyMissingException implements Exception {
   @override
   String toString() =>
-      'GroqKeyMissingException: no Groq API key is set — add one in '
+      'GroqKeyMissingException: no Groq API key is set. Add one in '
       'Settings to use AI features.';
 }
 
@@ -72,7 +72,7 @@ class GroqService {
 
     if (response.statusCode == 401) {
       throw Exception(
-        "Your Groq API key was rejected (401) — check it's correct in Settings.",
+        "Your Groq API key was rejected (401). Check it's correct in Settings.",
       );
     }
     if (response.statusCode != 200) {

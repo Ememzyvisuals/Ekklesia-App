@@ -200,7 +200,7 @@ class _OverviewSection extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Based on the title and description — not a transcript of the message.',
+                'Based on the title and description, not a transcript of the message.',
                 style: AppTypography.caption(
                     color: AppTheme.textSecondary(context)),
               ),

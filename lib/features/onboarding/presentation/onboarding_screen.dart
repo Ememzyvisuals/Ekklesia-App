@@ -111,7 +111,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   const _WelcomePage(
                     title: 'Welcome to Ekklesia',
                     subtitle: 'Sermons, Bible study, and an AI companion for '
-                        'DCLM members and Christians everywhere — in your '
+                        'DCLM members and Christians everywhere, in your '
                         'own language.',
                     icon: Icons.church,
                   ),

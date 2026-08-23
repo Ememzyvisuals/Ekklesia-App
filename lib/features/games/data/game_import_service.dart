@@ -85,7 +85,7 @@ class GameImportService {
         await targetDir.delete(recursive: true);
         return const Result.failure(AppFailure(
           message:
-              'That .zip doesn\'t contain an index.html — it needs to be a '
+              'That .zip doesn\'t contain an index.html. It needs to be a '
               'packaged HTML5 game with an index.html entry point.',
           retryable: false,
         ));

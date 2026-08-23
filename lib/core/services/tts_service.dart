@@ -54,7 +54,7 @@ class TtsLanguageUnavailableException implements Exception {
   @override
   String toString() =>
       'TtsLanguageUnavailableException: no voice available for '
-      '${language.code} — this is a real, documented gap, not a bug. '
+      '${language.code}. This is a real, documented gap, not a bug. '
       'See AppConfig.ttsLanguageToMmsCode.';
 }
 

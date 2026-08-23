@@ -38,8 +38,13 @@ class _LearnScreenState extends State<LearnScreen> {
       final messages =
           await MessageRepository.instance.getByCategory(_category);
       setState(() => _messages = messages);
-    } catch (e) {
-      setState(() => _error = e.toString());
+    } catch (_) {
+      // Was `_error = e.toString()` — dumped raw exception text into
+      // the UI, same class of bug already fixed on the AI/Live/Bible
+      // screens but missed here. This is a local read, not a network
+      // call, so a generic message fits every real failure mode.
+      setState(() =>
+          _error = 'Could not load Impact Academy content. Try again.');
     } finally {
       setState(() => _loading = false);
     }
@@ -122,8 +127,24 @@ class _MessageTileState extends State<_MessageTile> {
       if (!mounted) {
         return;
       }
+      // Was `'Error: $e'` — confirmed on a real device: this dumped the
+      // full raw ClientException/SocketException text (including the
+      // literal API URL) straight into a SnackBar. Same friendly-error
+      // categorization already used on the AI Assistant screen.
+      final message = e.toString().toLowerCase();
+      final friendly = message.contains('socketexception') ||
+              message.contains('failed host lookup') ||
+              message.contains('network is unreachable')
+          ? "You're offline. Connect to the internet and try again."
+          : message.contains('model_decommissioned') ||
+                  message.contains('400') ||
+                  message.contains('404')
+              ? 'The AI model is temporarily unavailable. Try again shortly.'
+              : message.contains('401') || message.contains('403')
+                  ? 'Your Groq API key was rejected. Check it in Settings.'
+                  : 'Could not generate the summary. Try again.';
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+          .showSnackBar(SnackBar(content: Text(friendly)));
     } finally {
       if (mounted) {
         setState(() => _generating = false);

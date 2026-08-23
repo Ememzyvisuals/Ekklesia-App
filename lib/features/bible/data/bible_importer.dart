@@ -72,7 +72,7 @@ class BibleImporter {
     if (actualChecksum != expectedChecksum) {
       throw BibleImportException(
         'Checksum mismatch for "$language": expected $expectedChecksum, got $actualChecksum. '
-        'Refusing to import — the bundled asset may be corrupt or out of date with manifest.json.',
+        'Refusing to import. The bundled asset may be corrupt or out of date with manifest.json.',
       );
     }
 
@@ -86,7 +86,7 @@ class BibleImporter {
     final books = data['books'] as List<dynamic>? ?? [];
     if (books.length != 66) {
       throw BibleImportException(
-        'Expected 66 books for "$language", found ${books.length} — refusing partial import.',
+        'Expected 66 books for "$language", found ${books.length}. Refusing partial import.',
       );
     }
 
@@ -121,7 +121,7 @@ class BibleImporter {
         final chapters = book['chapters'] as List<dynamic>? ?? [];
         if (chapters.isEmpty) {
           throw BibleImportException(
-              'Book $code has zero chapters in "$language" — aborting import.');
+              'Book $code has zero chapters in "$language". Aborting import.');
         }
 
         bookRows.add(BibleBooksCompanion.insert(
@@ -140,7 +140,7 @@ class BibleImporter {
           final verses = chapter['verses'] as List<dynamic>? ?? [];
           if (verses.isEmpty) {
             throw BibleImportException(
-              '$code chapter $chapterNumber has zero verses in "$language" — aborting import.',
+              '$code chapter $chapterNumber has zero verses in "$language". Aborting import.',
             );
           }
 

@@ -341,7 +341,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         chunks.map((r) => (r.audioUrl, r.source)),
       );
     } catch (e) {
-      setState(() => _error = e.toString());
+      // Same raw-exception-in-the-UI bug already fixed on the main send
+      // path in this file, but missed here on the Listen/TTS path.
+      final message = e.toString().toLowerCase();
+      setState(() => _error = message.contains('socketexception') ||
+              message.contains('failed host lookup')
+          ? "You're offline. Voice playback needs an internet connection."
+          : 'Could not play that message. Try again.');
     } finally {
       setState(() {
         _listeningIndex = null;
@@ -408,123 +414,129 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 : _history.isEmpty
                     ? _AiEmptyState(onSuggestionTap: _sendSuggested)
                     : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _history.length,
-                    itemBuilder: (context, index) {
-                      final entry = _history[index];
-                      final isUser = entry.role == 'user';
-                      return Align(
-                        alignment: isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          padding: const EdgeInsets.all(12),
-                          constraints: const BoxConstraints(maxWidth: 280),
-                          decoration: BoxDecoration(
-                            color:
-                                isUser ? AppColors.primary : AppTheme.surface(context),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                entry.text,
-                                style: TextStyle(
-                                    color: isUser
-                                        ? Colors.white
-                                        : AppTheme.textPrimary(context)),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _history.length,
+                        itemBuilder: (context, index) {
+                          final entry = _history[index];
+                          final isUser = entry.role == 'user';
+                          return Align(
+                            alignment: isUser
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              padding: const EdgeInsets.all(12),
+                              constraints: const BoxConstraints(maxWidth: 280),
+                              decoration: BoxDecoration(
+                                color: isUser
+                                    ? AppColors.primary
+                                    : AppTheme.surface(context),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              if (!isUser) ...[
-                                const SizedBox(height: 6),
-                                Builder(builder: (context) {
-                                  final isPlaying = _listeningIndex == index;
-                                  return InkWell(
-                                    onTap: isPlaying
-                                        ? null
-                                        : () => _listenTo(entry.text, index),
-                                    child: Row(
-                                      children: [
-                                        isPlaying
-                                            ? const SizedBox(
-                                                height: 12,
-                                                width: 12,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.text,
+                                    style: TextStyle(
+                                        color: isUser
+                                            ? Colors.white
+                                            : AppTheme.textPrimary(context)),
+                                  ),
+                                  if (!isUser) ...[
+                                    const SizedBox(height: 6),
+                                    Builder(builder: (context) {
+                                      final isPlaying =
+                                          _listeningIndex == index;
+                                      return InkWell(
+                                        onTap: isPlaying
+                                            ? null
+                                            : () =>
+                                                _listenTo(entry.text, index),
+                                        child: Row(
+                                          children: [
+                                            isPlaying
+                                                ? const SizedBox(
+                                                    height: 12,
+                                                    width: 12,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: AppColors.accent,
+                                                    ),
+                                                  )
+                                                : const Icon(
+                                                    CupertinoIcons
+                                                        .speaker_2_fill,
+                                                    size: 16,
+                                                    color: AppColors.accent),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              isPlaying
+                                                  ? (_queueProgressLabel ??
+                                                      'Loading...')
+                                                  : 'Listen',
+                                              style: const TextStyle(
                                                   color: AppColors.accent,
-                                                ),
-                                              )
-                                            : const Icon(
-                                                CupertinoIcons.speaker_2_fill,
-                                                size: 16,
-                                                color: AppColors.accent),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          isPlaying
-                                              ? (_queueProgressLabel ??
-                                                  'Loading...')
-                                              : 'Listen',
-                                          style: const TextStyle(
-                                              color: AppColors.accent,
-                                              fontSize: 12),
+                                                  fontSize: 12),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                                const SizedBox(height: 4),
-                                Builder(builder: (context) {
-                                  final isSaving = _savingIndex == index;
-                                  final isSaved = _savedIndices.contains(index);
-                                  return InkWell(
-                                    onTap: (isSaving || isSaved)
-                                        ? null
-                                        : () => _saveOffline(entry.text, index),
-                                    child: Row(
-                                      children: [
-                                        isSaving
-                                            ? const SizedBox(
-                                                height: 12,
-                                                width: 12,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2,
+                                      );
+                                    }),
+                                    const SizedBox(height: 4),
+                                    Builder(builder: (context) {
+                                      final isSaving = _savingIndex == index;
+                                      final isSaved =
+                                          _savedIndices.contains(index);
+                                      return InkWell(
+                                        onTap: (isSaving || isSaved)
+                                            ? null
+                                            : () =>
+                                                _saveOffline(entry.text, index),
+                                        child: Row(
+                                          children: [
+                                            isSaving
+                                                ? const SizedBox(
+                                                    height: 12,
+                                                    width: 12,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: AppColors.accent,
+                                                    ),
+                                                  )
+                                                : Icon(
+                                                    isSaved
+                                                        ? CupertinoIcons
+                                                            .checkmark_alt_circle_fill
+                                                        : CupertinoIcons
+                                                            .cloud_download,
+                                                    size: 16,
+                                                    color: AppColors.accent,
+                                                  ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              isSaved
+                                                  ? 'Saved offline'
+                                                  : (isSaving
+                                                      ? 'Saving...'
+                                                      : 'Save offline'),
+                                              style: const TextStyle(
                                                   color: AppColors.accent,
-                                                ),
-                                              )
-                                            : Icon(
-                                                isSaved
-                                                    ? CupertinoIcons
-                                                        .checkmark_alt_circle_fill
-                                                    : CupertinoIcons
-                                                        .cloud_download,
-                                                size: 16,
-                                                color: AppColors.accent,
-                                              ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          isSaved
-                                              ? 'Saved offline'
-                                              : (isSaving
-                                                  ? 'Saving...'
-                                                  : 'Save offline'),
-                                          style: const TextStyle(
-                                              color: AppColors.accent,
-                                              fontSize: 12),
+                                                  fontSize: 12),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                                      );
+                                    }),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
           if (_error != null)
             Padding(
@@ -681,7 +693,9 @@ class _SuggestionChip extends StatelessWidget {
 /// preview and when it was last active.
 class _SessionSummary {
   const _SessionSummary(
-      {required this.sessionId, required this.preview, required this.lastActive});
+      {required this.sessionId,
+      required this.preview,
+      required this.lastActive});
   final String sessionId;
   final String preview;
   final DateTime lastActive;
@@ -775,8 +789,8 @@ class _ConversationHistoryDrawer extends StatelessWidget {
                     return Center(
                       child: Text(
                         'No past conversations yet',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary(context)),
+                        style:
+                            TextStyle(color: AppTheme.textSecondary(context)),
                       ),
                     );
                   }

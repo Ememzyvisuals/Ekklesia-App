@@ -78,7 +78,7 @@ class _VoiceDownloadSheetState extends State<VoiceDownloadSheet> {
             const SizedBox(height: 4),
             Text(
               'Downloaded once, then works with no internet connection. '
-              'Voices are AI-generated and can mispronounce words or names — '
+              'Voices are AI-generated and can mispronounce words or names. '
               'this is not a human reading.',
               style: TextStyle(
                   fontSize: 13, color: AppTheme.textSecondary(context)),
@@ -94,7 +94,7 @@ class _VoiceDownloadSheetState extends State<VoiceDownloadSheet> {
               ),
             const SizedBox(height: 8),
             Text(
-              'Igbo has no offline voice available yet — see the app\'s '
+              'Igbo has no offline voice available yet. See the app\'s '
               'migration notes for what was tried.',
               style: TextStyle(
                   fontSize: 12, color: AppTheme.textSecondary(context)),
