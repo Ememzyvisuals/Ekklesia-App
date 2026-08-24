@@ -822,57 +822,85 @@ specific evidence:
 
 ---
 
+### 3.23 3.22's TTS/Radio fixes still showing identical error text — likely testing an un-rebuilt APK; Live screen landscape UI break fixed (new, real bug)
+Fresh screenshots after 3.22 shipped show the **exact same** error text
+as before — same `SystemTtsTimeoutException`, same
+`LateInitializationError: Field '_audioHandler@...'` — not new/different
+symptoms. This is meaningfully different from 3.20's situation (where
+3.21's Details links revealed genuinely different exceptions than 3.20
+had targeted, proving 3.20's fixes really didn't address the actual
+problem). Here, getting back the literal identical exception text after
+two independently-verified, well-evidenced fixes (flutter_tts's
+documented `awaitSynthCompletion` requirement; the confirmed
+`LateInitializationError` root cause) is much more consistent with **the
+new build never actually having been installed** than with both fixes
+somehow failing. **Before investigating further, confirm: did the
+GitHub Actions build after the batch-3 tag push actually finish
+successfully, and was the resulting new APK actually installed (not
+just the existing app reopened)?** Don't re-diagnose TTS/Radio from
+scratch until that's ruled out — re-verify the build actually shipped
+first.
+
+**Real, new, separate bug found and fixed this round regardless**: the
+Live screen's embedded YouTube player used a bare `YoutubePlayer(
+controller: ...)` with no `YoutubePlayerBuilder` wrapping it — unlike
+`video_player_screen.dart`, which already does this correctly. The bare
+player still listens for device rotation internally and tries to go
+fullscreen on its own, but with nothing wrapping the rest of the
+screen's layout (AppBar, DCLM radio section, language picker) in that
+same builder, none of it knew to get out of the way on rotation —
+confirmed by the person as the whole page breaking into a half-
+landscaped mess instead of a clean fullscreen video. Fixed by
+restructuring `live_screen.dart`'s `build()` to move the
+`StreamBuilder<VideoEntry?>` to the top level and conditionally wrap the
+whole `Scaffold` in `YoutubePlayerBuilder` (via a new `_buildScaffold`
+helper) whenever there's an active live video/controller, matching
+`video_player_screen.dart`'s already-working pattern exactly.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-1. **TTS fixes (3.22) not yet confirmed on a real device.** Both root
-   causes (missing `initBindings()` for sherpa-onnx, missing
-   `awaitSynthCompletion(true)` for flutter_tts) came from actual device
-   error text via 3.21's Details links, not guesses — much higher
-   confidence than 3.15/3.16/3.20's attempts. Still needs a real test.
-   If either still fails, get the new Details text — don't assume it's
-   the same bug as before.
-2. **Radio fixes (3.22) not yet confirmed.** The `LateInitializationError`
-   root cause is fixed with real confidence; the separate plain
-   `TimeoutException` on `setAudioSource()`/`play()` (3.20's timeout,
-   still in place) hasn't had a dedicated root-cause investigation of
-   its own yet — it may turn out to be a genuine weak-signal/slow-stream
-   issue on the test device (every screenshot so far has shown 1-2 signal
-   bars), or something else. Test again with the `LateInitializationError`
-   path now fixed before assuming the plain timeout is the real bug.
-3. **YouTube still unresolved — no Details text collected yet for it
-   specifically this round.** Get it before further diagnosis. Worth
-   testing on a different network too (WiFi vs. the mobile carrier used
-   throughout this project's screenshots) to help separate "still a
-   client bug" from "network/carrier really does block this."
-4. **Hardcoded/shared Groq API key fallback — explicitly requested,
-   deliberately not implemented (3.22).** This reverses a real, prior
-   security decision (`groq_service.dart`'s own doc comment: "no
-   fallback, no shared quota," specifically to avoid an extractable key
-   in a public APK). Raised back to the person rather than silently
-   implemented; only do this on their explicit confirmation they
-   understand and accept that tradeoff.
-5. **`parseBibleReference()` only supports English book names** — bookmarks/
+1. **TTS/Radio: strongly suspected to be an un-rebuilt-APK testing issue
+   (3.23), not a fix failure — verify this FIRST.** Identical error text
+   came back after 3.22's well-evidenced fixes for both. Check the
+   GitHub Actions run for the batch-3 tag push actually succeeded and
+   that a fresh APK was actually installed before re-diagnosing either
+   from scratch.
+2. **YouTube — actually working now**, per the person's own screenshot
+   (a live "Monday Bible Study" stream rendering correctly). No longer
+   in "broken" status; downgraded from prior open-issue entries.
+   Landscape rotation while viewing it was broken (separate UI bug, not
+   a YouTube API/sync issue) — fixed in 3.23.
+3. **Hardcoded/shared Groq API key fallback — explicitly requested,
+   deliberately not implemented (3.22), still awaiting the person's
+   explicit confirmation.** This reverses a real, prior security
+   decision (`groq_service.dart`'s own doc comment: "no fallback, no
+   shared quota," specifically to avoid an extractable key in a public
+   APK). Only implement on their explicit confirmation they understand
+   and accept that tradeoff.
+4. **`parseBibleReference()` only supports English book names** — bookmarks/
    search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
    to parse when jumped back to. Known, not yet fixed.
-6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+5. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
    that definitely includes that commit — last status check was "not sure
    if this build has the fix yet."
-7. **Per-verse TTS + synchronized highlight during audio playback** —
+6. **Per-verse TTS + synchronized highlight during audio playback** —
    explicitly requested (the person wants the specific verse currently
    being read aloud to highlight in real time, meaning TTS needs to
    generate/play per-verse rather than as one whole-chapter blob) — **not
    started at all.** Blocked on TTS actually working at all first (#1).
-8. **Translations needing native-speaker review** (functional, not
+7. **Translations needing native-speaker review** (functional, not
    verified for naturalness/accuracy): the 5 companion accessibility
    labels per non-English language, and the prayer fallback templates for
    yo/ha/ig/pcm (3.8).
-9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+8. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
    reference screenshot's own "Tap or Drag" label, so treated as
    acceptable, not a bug).
-10. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
-    as the Live screen but wasn't given a "Details" link in 3.21 (only
-    Live screen was) — low priority since the same underlying error is
-    already visible with Details on Live.
+9. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
+   as the Live screen but wasn't given a "Details" link in 3.21 (only
+   Live screen was) — low priority since the same underlying error is
+   already visible with Details on Live.
 
 ## 5. Confirmed-Working / Closed Issues (do not re-investigate these)
 

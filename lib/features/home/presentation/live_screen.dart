@@ -92,6 +92,53 @@ class _LiveScreenState extends State<LiveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<VideoEntry?>(
+      stream: _youtubeRepository.watchLiveStatus(),
+      builder: (context, snapshot) {
+        final live = snapshot.data;
+
+        if (live != null && _controllerVideoId != live.videoId) {
+          _ytController?.dispose();
+          _ytController = YoutubePlayerController(
+            initialVideoId: live.videoId,
+            flags: const YoutubePlayerFlags(autoPlay: false, isLive: true),
+          );
+          _controllerVideoId = live.videoId;
+        }
+
+        // Real, confirmed bug fixed by this restructure: this screen
+        // used to render a bare `YoutubePlayer(controller: _ytController!)`
+        // with no `YoutubePlayerBuilder` wrapping it at all. The bare
+        // player still listens for device rotation internally and tries
+        // to go fullscreen on its own, but with nothing wrapping the
+        // REST of the screen (AppBar, DCLM radio section, language
+        // picker) in that same builder, none of it knew to get out of
+        // the way — confirmed on a real device as the whole page
+        // breaking into a half-landscaped mess on rotation instead of a
+        // clean fullscreen video. `video_player_screen.dart` already
+        // does this correctly (wrapping its entire Scaffold in
+        // YoutubePlayerBuilder); same pattern applied here. Only wraps
+        // when there's actually a live video/controller to show — no
+        // point paying for orientation-listening machinery on a screen
+        // with no video playing.
+        if (live != null && _ytController != null) {
+          return YoutubePlayerBuilder(
+            player: YoutubePlayer(controller: _ytController!),
+            builder: (context, player) =>
+                _buildScaffold(context, live: live, player: player),
+          );
+        }
+
+        return _buildScaffold(context, live: live, player: null);
+      },
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context, {
+    required VideoEntry? live,
+    required Widget? player,
+  }) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live'),
@@ -112,100 +159,86 @@ class _LiveScreenState extends State<LiveScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           // ---- YouTube live card ----
-          StreamBuilder<VideoEntry?>(
-            stream: _youtubeRepository.watchLiveStatus(),
-            builder: (context, snapshot) {
-              final live = snapshot.data;
-              if (live == null) {
-                // YoutubeWorker.lastError is the fix for a real, confirmed
-                // bug: this empty state used to show unconditionally even
-                // when the last sync had actually failed (bad API key,
-                // quota, no internet) — the failure was computed
-                // correctly but discarded, never reaching the UI at all.
-                // Now the real reason shows here if there is one.
-                final syncError = YoutubeWorker.lastError;
-                final syncErrorDetail = YoutubeWorker.lastErrorDetail;
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.secondary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                          syncError != null
-                              ? Icons.error_outline
-                              : CupertinoIcons.video_camera,
-                          color: AppTheme.textSecondary(context)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(syncError != null
-                                ? "Couldn't check for a live stream: $syncError"
-                                : 'No live YouTube stream right now.'),
-                            if (syncErrorDetail != null)
-                              InkWell(
-                                onTap: () => showDialog<void>(
-                                  context: context,
-                                  builder: (dialogContext) => AlertDialog(
-                                    title: const Text('Error details'),
-                                    content: SingleChildScrollView(
-                                      child: SelectableText(syncErrorDetail),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(dialogContext).pop(),
-                                        child: const Text('Close'),
-                                      ),
-                                    ],
+          if (live == null)
+            Builder(builder: (context) {
+              // YoutubeWorker.lastError is the fix for a real, confirmed
+              // bug: this empty state used to show unconditionally even
+              // when the last sync had actually failed (bad API key,
+              // quota, no internet) — the failure was computed
+              // correctly but discarded, never reaching the UI at all.
+              // Now the real reason shows here if there is one.
+              final syncError = YoutubeWorker.lastError;
+              final syncErrorDetail = YoutubeWorker.lastErrorDetail;
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                        syncError != null
+                            ? Icons.error_outline
+                            : CupertinoIcons.video_camera,
+                        color: AppTheme.textSecondary(context)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(syncError != null
+                              ? "Couldn't check for a live stream: $syncError"
+                              : 'No live YouTube stream right now.'),
+                          if (syncErrorDetail != null)
+                            InkWell(
+                              onTap: () => showDialog<void>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('Error details'),
+                                  content: SingleChildScrollView(
+                                    child: SelectableText(syncErrorDetail),
                                   ),
-                                ),
-                                child: const Padding(
-                                  padding: EdgeInsets.only(top: 4),
-                                  child: Text('Details',
-                                      style: TextStyle(
-                                          decoration: TextDecoration.underline,
-                                          fontSize: 12)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(dialogContext).pop(),
+                                      child: const Text('Close'),
+                                    ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
+                              child: const Padding(
+                                padding: EdgeInsets.only(top: 4),
+                                child: Text('Details',
+                                    style: TextStyle(
+                                        decoration:
+                                            TextDecoration.underline,
+                                        fontSize: 12)),
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              }
-
-              if (_controllerVideoId != live.videoId) {
-                _ytController?.dispose();
-                _ytController = YoutubePlayerController(
-                  initialVideoId: live.videoId,
-                  flags:
-                      const YoutubePlayerFlags(autoPlay: false, isLive: true),
-                );
-                _controllerVideoId = live.videoId;
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Live Now',
-                      style: Theme.of(context).textTheme.headlineMedium),
-                  const SizedBox(height: 8),
-                  YoutubePlayer(controller: _ytController!),
-                  const SizedBox(height: 8),
-                  Text(live.title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 24),
-                ],
+                    ),
+                  ],
+                ),
               );
-            },
-          ),
+            })
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Live Now',
+                    style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: 8),
+                player ?? const SizedBox.shrink(),
+                const SizedBox(height: 8),
+                Text(live.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 24),
+              ],
+            ),
 
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
