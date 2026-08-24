@@ -468,9 +468,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                                       : MarkdownText(
                                           entry.text,
                                           baseStyle: TextStyle(
-                                              color:
-                                                  AppTheme.textPrimary(
-                                                      context)),
+                                              color: AppTheme.textPrimary(
+                                                  context)),
                                         ),
                                   if (!isUser) ...[
                                     const SizedBox(height: 6),

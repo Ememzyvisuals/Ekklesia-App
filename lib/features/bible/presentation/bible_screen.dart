@@ -147,8 +147,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       // Same raw-exception-dump bug found and fixed elsewhere in this
       // file/session — a local read failure here, so a generic message
       // covers every real cause.
-      setState(
-          () => _error = 'Could not open that chapter. Try again.');
+      setState(() => _error = 'Could not open that chapter. Try again.');
     } finally {
       setState(() => _loadingVerses = false);
     }
@@ -529,7 +528,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           // actually matters for; Settings also gets a quick entry for
           // people who'd rather find it there.
           IconButton(
-            icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
+            icon:
+                const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
             tooltip: 'Text size',
             onPressed: () => _showFontSizeSheet(context),
           ),
@@ -651,8 +651,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error!,
-                          style: const TextStyle(color: Colors.red)),
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
                       if (_errorDetail != null)
                         InkWell(
                           onTap: () => _showErrorDetail(context),
