@@ -211,6 +211,24 @@ class _GenerateResult {
 /// method or closure) — that's a `compute()` requirement, not a style
 /// choice.
 Future<_GenerateResult> _generateInIsolate(_GenerateRequest request) async {
+  // Real, confirmed root cause of "Exception: Please initialize
+  // sherpa-onnx first" on a real device, for every on-device language
+  // (Yoruba/Hausa/Pidgin) — sherpa_onnx's Dart bindings require this
+  // exact call before constructing any OfflineTts/OnlineRecognizer/etc.
+  // (see the package's own `initBindings()` doc: it loads the native
+  // dynamic library and registers the FFI function table; nothing in
+  // this codebase was calling it anywhere, on any isolate). It has to
+  // be called here specifically, inside the spawned isolate, rather
+  // than once on the main isolate at app startup — dart:ffi's
+  // DynamicLibrary bindings are isolate-local, not automatically shared
+  // across an isolate boundary, and every call to synthesize() spawns a
+  // fresh isolate via compute() (see this file's class-level doc
+  // comment on why generation is isolate-offloaded at all). Each
+  // spawned isolate only reaches this line once in its lifetime (one
+  // isolate per synthesize() call), so there's no repeated-call concern
+  // to worry about here either way.
+  initBindings();
+
   final tts = OfflineTts(
     OfflineTtsConfig(
       model: OfflineTtsModelConfig(

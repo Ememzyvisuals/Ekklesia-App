@@ -29,6 +29,19 @@ class SystemTtsEngine {
     if (_configured) return;
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5); // flutter_tts's 0.5 ~= normal pace
+    // Real, confirmed root cause of "the device TTS engine did not
+    // respond" (this class's own timeout, firing every time on a real
+    // device) — flutter_tts requires this explicit opt-in before
+    // `synthesizeToFile`'s Future will actually resolve when synthesis
+    // completes; it's a separate flag from `awaitSpeakCompletion`
+    // (which only covers `speak()`), added specifically for
+    // synthesizeToFile per the package's own changelog ("Adding
+    // awaitSynthCompletion for synthesize to file"). Without calling
+    // this, nothing ever arms the completion signal this code's
+    // `.timeout()` is waiting on — every call was silently doomed to
+    // hang until the timeout fired, regardless of whether the device's
+    // TTS engine itself was working fine underneath.
+    await _flutterTts.awaitSynthCompletion(true);
     _configured = true;
   }
 
@@ -37,17 +50,16 @@ class SystemTtsEngine {
   /// treat every engine uniformly.
   ///
   /// Confirmed on a real device: hitting "Listen" on the English Bible
-  /// hung indefinitely with no error, no timeout, no way out except
-  /// force-closing the app. Root cause — `synthesizeToFile`'s Future only
-  /// completes when the platform's native TTS engine fires a "synthesis
-  /// complete" callback, and that callback is well-documented across
-  /// flutter_tts issue trackers as simply never firing on a meaningful
-  /// number of Android OEM TTS engines (Samsung's bundled engine and
-  /// several older Google TTS versions among them) — the file, in some
-  /// cases, is actually written successfully; the app just never finds
-  /// out. A bounded timeout with a real error is infinitely better than
-  /// an unbounded hang: at worst it's a wrong-but-fast failure that lets
-  /// someone retry.
+  /// hung until this class's own 45s timeout fired, every time. Real,
+  /// confirmed root cause — see `_ensureConfigured()`'s doc comment:
+  /// flutter_tts needs an explicit `awaitSynthCompletion(true)` call
+  /// before `synthesizeToFile`'s Future will ever resolve on
+  /// completion; without it, nothing arms the signal this timeout is
+  /// waiting on. The bounded timeout below is kept regardless, as a
+  /// backstop against a genuinely unresponsive device TTS engine (a
+  /// real possibility flutter_tts's own issue tracker documents on
+  /// certain Android OEM builds) — better a slow, clear failure than an
+  /// infinite hang if that ever does happen.
   ///
   /// Second, separate, real bug found and fixed here: `synthesizeToFile`'s
   /// second argument is documented by flutter_tts as a bare file NAME,

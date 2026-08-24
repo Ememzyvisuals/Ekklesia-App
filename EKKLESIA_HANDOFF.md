@@ -764,50 +764,115 @@ plausible-sounding guess.
 
 ---
 
+### 3.22 The real TTS and Radio root causes, from actual device error text (3.21's Details links delivered)
+The Details links added in 3.21 worked exactly as intended — real
+exception text came back, and none of it matched any of the three prior
+guesses (3.15/3.16, 3.20). All three are now fixed from confirmed,
+specific evidence:
+
+- **Yoruba/Hausa/Pidgin: `Exception: Please initialize sherpa-onnx
+  first`.** Genuine root cause, not a guess: `sherpa_onnx`'s Dart
+  bindings require an explicit `initBindings()` call before constructing
+  any `OfflineTts`, and nothing in this codebase called it anywhere,
+  ever — confirmed by grep across the whole `lib/` tree. Fixed by
+  calling it inside `_generateInIsolate` (`local_tts_engine.dart`), not
+  once at app startup — dart:ffi bindings are isolate-local, and every
+  synthesis call spawns a fresh isolate via `compute()`, so it has to
+  happen there specifically.
+- **English: `SystemTtsTimeoutException: the device TTS engine did not
+  respond`.** flutter_tts requires an explicit
+  `awaitSynthCompletion(true)` call before `synthesizeToFile`'s Future
+  will ever resolve on completion — a separate opt-in from
+  `awaitSpeakCompletion` (which only covers `speak()`), added
+  specifically for file synthesis per the package's own changelog.
+  Nothing was calling it, so the Future had nothing arming its
+  completion signal and was doomed to sit until the 45s timeout fired,
+  every single time, regardless of whether the underlying device TTS
+  engine was working fine. Fixed in `_ensureConfigured()`
+  (`system_tts_engine.dart`).
+- **Radio: `LateInitializationError: Field '_audioHandler@...' has not
+  been initialized`** (seen once), and separately a genuine
+  `TimeoutException` on `setAudioSource()`/`play()` (seen another time —
+  these are two different real failure modes, not the same bug twice).
+  Root cause of the `LateInitializationError`: `main.dart`'s
+  `JustAudioBackground.init()` call had only a 5s timeout, and any
+  failure there was silently swallowed with zero record of it —
+  `RadioService` then went on to build a MediaItem-tagged `AudioPlayer`
+  assuming setup had succeeded when it hadn't. Fixed with a new
+  `JustAudioBackgroundInit` helper (`radio_service.dart`): startup's
+  timeout bumped to 12s, a `markSucceeded()` flag records whether it
+  actually worked, and `playLanguage()` now retries (20s allowance, a
+  fair trade once it's blocking one explicit user action rather than
+  app startup) before ever building a tagged player — falling back to
+  an untagged player (plays fine, just no lock-screen art) if it still
+  can't set up, instead of crashing the same way again. The separate
+  plain timeout on `setAudioSource()`/`play()` is left as-is (3.20's
+  15s timeout) — worth retesting specifically now that the
+  `LateInitializationError` path is fixed, since that crash may have
+  been masking how often the plain timeout was the actual cause.
+- **Not yet addressed, raised rather than assumed**: the person asked
+  for a hardcoded/shared Groq API key to be used as a fallback when no
+  personal key is set. `groq_service.dart`'s own doc comment states this
+  was a deliberate prior decision ("no cloud infrastructure of any kind
+  runs for this app, including a shared-key proxy... No fallback, no
+  shared quota") — a real security tradeoff (a key baked into a public
+  APK is extractable by anyone who decompiles it). Flagged back to the
+  person rather than silently reversed; implement only on explicit
+  confirmation they understand and want that tradeoff.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-1. **TTS still genuinely broken — root cause unknown, now instrumented
-   (3.21).** 3.20's `isFullPath` fix did NOT resolve it: the person is
-   still seeing the *generic* "Could not generate audio" message for
-   English, not 3.20's new "voice engine did not respond" message, which
-   means the actual failure is a different exception than what 3.20
-   targeted. **Do not guess a fourth theory blind.** Every TTS error
-   screen now has a "Details" tap target showing the real exception
-   text (3.21) — get that text from the person first, then diagnose from
-   the actual error, not from re-reading flutter_tts's docs again.
-2. **DCLM Radio still genuinely broken — same story.** Still "Couldn't
-   start the stream" after 3.20's timeout addition. Either it's not
-   actually timing out (a different, faster failure) or the built APK
-   didn't contain 3.20's fix yet — the Details link (3.21) on this
-   error will show which. Don't assume the timeout theory was wrong
-   until that's confirmed either way.
-3. **YouTube still genuinely broken — same story.** Get the Details text
-   (3.21) before further diagnosis. Genuinely worth testing on a
-   different network too (WiFi vs. the mobile carrier in the original
-   screenshots) to help separate "still a client bug" from "network/
-   carrier really does block this."
-4. **`parseBibleReference()` only supports English book names** — bookmarks/
+1. **TTS fixes (3.22) not yet confirmed on a real device.** Both root
+   causes (missing `initBindings()` for sherpa-onnx, missing
+   `awaitSynthCompletion(true)` for flutter_tts) came from actual device
+   error text via 3.21's Details links, not guesses — much higher
+   confidence than 3.15/3.16/3.20's attempts. Still needs a real test.
+   If either still fails, get the new Details text — don't assume it's
+   the same bug as before.
+2. **Radio fixes (3.22) not yet confirmed.** The `LateInitializationError`
+   root cause is fixed with real confidence; the separate plain
+   `TimeoutException` on `setAudioSource()`/`play()` (3.20's timeout,
+   still in place) hasn't had a dedicated root-cause investigation of
+   its own yet — it may turn out to be a genuine weak-signal/slow-stream
+   issue on the test device (every screenshot so far has shown 1-2 signal
+   bars), or something else. Test again with the `LateInitializationError`
+   path now fixed before assuming the plain timeout is the real bug.
+3. **YouTube still unresolved — no Details text collected yet for it
+   specifically this round.** Get it before further diagnosis. Worth
+   testing on a different network too (WiFi vs. the mobile carrier used
+   throughout this project's screenshots) to help separate "still a
+   client bug" from "network/carrier really does block this."
+4. **Hardcoded/shared Groq API key fallback — explicitly requested,
+   deliberately not implemented (3.22).** This reverses a real, prior
+   security decision (`groq_service.dart`'s own doc comment: "no
+   fallback, no shared quota," specifically to avoid an extractable key
+   in a public APK). Raised back to the person rather than silently
+   implemented; only do this on their explicit confirmation they
+   understand and accept that tradeoff.
+5. **`parseBibleReference()` only supports English book names** — bookmarks/
    search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
    to parse when jumped back to. Known, not yet fixed.
-5. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
    that definitely includes that commit — last status check was "not sure
    if this build has the fix yet."
-6. **Per-verse TTS + synchronized highlight during audio playback** —
+7. **Per-verse TTS + synchronized highlight during audio playback** —
    explicitly requested (the person wants the specific verse currently
    being read aloud to highlight in real time, meaning TTS needs to
    generate/play per-verse rather than as one whole-chapter blob) — **not
    started at all.** Blocked on TTS actually working at all first (#1).
-7. **Translations needing native-speaker review** (functional, not
+8. **Translations needing native-speaker review** (functional, not
    verified for naturalness/accuracy): the 5 companion accessibility
    labels per non-English language, and the prayer fallback templates for
    yo/ha/ig/pcm (3.8).
-8. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
    reference screenshot's own "Tap or Drag" label, so treated as
    acceptable, not a bug).
-9. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
-   as the Live screen but wasn't given a "Details" link in 3.21 (only
-   Live screen was) — low priority since the same underlying error is
-   already visible with Details on Live.
+10. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
+    as the Live screen but wasn't given a "Details" link in 3.21 (only
+    Live screen was) — low priority since the same underlying error is
+    already visible with Details on Live.
 
 ## 5. Confirmed-Working / Closed Issues (do not re-investigate these)
 

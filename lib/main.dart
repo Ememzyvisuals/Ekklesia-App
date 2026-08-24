@@ -15,6 +15,7 @@ import 'core/services/conversation_worker.dart';
 import 'core/services/cleanup_worker.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/isar_service.dart';
+import 'core/services/radio_service.dart';
 import 'features/sermons/data/youtube_worker.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
@@ -45,10 +46,24 @@ Future<void> main() async {
       androidNotificationChannelId: 'com.ememzyvisuals.ekklesia.audio',
       androidNotificationChannelName: 'Ekklesia Audio',
       androidNotificationOngoing: true,
-    ).timeout(const Duration(seconds: 5));
+    ).timeout(const Duration(seconds: 12));
+    JustAudioBackgroundInit.markSucceeded();
   } catch (_) {
     // Audio still plays without this — only lock-screen/notification
     // controls are lost, never worth blocking app startup over.
+    //
+    // Real bug found here and fixed via JustAudioBackgroundInit
+    // (core/services/radio_service.dart): this failure was being
+    // swallowed with no record of it anywhere, so RadioService went on
+    // to create a MediaItem-tagged AudioPlayer assuming background
+    // audio setup had succeeded when it demonstrably hadn't — confirmed
+    // on a real device as `LateInitializationError: Field
+    // '_audioHandler@...' has not been initialized`, thrown by
+    // just_audio_background's own internals the moment radio playback
+    // was attempted. Marking the failure here lets RadioService retry
+    // (with a much more generous timeout, since by then it's blocking
+    // one explicit user action rather than the whole app's startup)
+    // before it ever tries to use a MediaItem-tagged player.
   }
 
   // Firebase/Firestore removed entirely — the app is offline-first now.
