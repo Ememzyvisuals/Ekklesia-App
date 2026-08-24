@@ -55,6 +55,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   bool _sending = false;
   bool _loadingHistory = true;
   String? _error;
+  // Same pattern as bible_screen.dart's _errorDetail — the friendly
+  // message shown by default, the real exception text one tap away
+  // behind "Details" instead of nowhere at all.
+  String? _errorDetail;
   // PROJECT_MIGRATION_AUDIT.md: renamed from _isUsageLimitError — there's
   // no shared daily quota anymore (every user brings their own Groq
   // key), so the only reason chat fails this way now is a missing key.
@@ -205,6 +209,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       _inputController.clear();
       _sending = true;
       _error = null;
+      _errorDetail = null;
       _needsGroqKey = false;
     });
     unawaited(_persist(userEntry));
@@ -253,6 +258,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         } else {
           _error = 'Something went wrong sending that message. Try again.';
         }
+        _errorDetail = e.toString();
       });
     } finally {
       setState(() => _sending = false);
@@ -320,6 +326,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       _listeningIndex = index;
       _queueProgressLabel = null;
       _error = null;
+      _errorDetail = null;
     });
     _queueProgressSub?.cancel();
     _queueProgressSub =
@@ -349,10 +356,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       // Same raw-exception-in-the-UI bug already fixed on the main send
       // path in this file, but missed here on the Listen/TTS path.
       final message = e.toString().toLowerCase();
-      setState(() => _error = message.contains('socketexception') ||
-              message.contains('failed host lookup')
-          ? "You're offline. Voice playback needs an internet connection."
-          : 'Could not play that message. Try again.');
+      setState(() {
+        _error = message.contains('socketexception') ||
+                message.contains('failed host lookup')
+            ? "You're offline. Voice playback needs an internet connection."
+            : 'Could not play that message. Try again.';
+        _errorDetail = e.toString();
+      });
     } finally {
       setState(() {
         _listeningIndex = null;
@@ -458,8 +468,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                                       : MarkdownText(
                                           entry.text,
                                           baseStyle: TextStyle(
-                                              color: AppTheme.textPrimary(
-                                                  context)),
+                                              color:
+                                                  AppTheme.textPrimary(
+                                                      context)),
                                         ),
                                   if (!isUser) ...[
                                     const SizedBox(height: 6),
@@ -562,8 +573,42 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               child: Row(
                 children: [
                   Expanded(
-                      child: Text(_error!,
-                          style: const TextStyle(color: Colors.red))),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!,
+                            style: const TextStyle(color: Colors.red)),
+                        if (_errorDetail != null)
+                          InkWell(
+                            onTap: () => showDialog<void>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Error details'),
+                                content: SingleChildScrollView(
+                                  child: SelectableText(_errorDetail ?? ''),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(),
+                                    child: const Text('Close'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            child: const Padding(
+                              padding: EdgeInsets.only(top: 2),
+                              child: Text('Details',
+                                  style: TextStyle(
+                                      color: Colors.red,
+                                      decoration: TextDecoration.underline,
+                                      fontSize: 12)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   if (_needsGroqKey)
                     TextButton(
                       onPressed: () => context.push('/settings'),

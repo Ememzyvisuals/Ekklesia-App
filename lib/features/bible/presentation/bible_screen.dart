@@ -74,6 +74,13 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   bool _loadingVerses = false;
   bool _loadingAudio = false;
   String? _error;
+  // Holds the real, unfiltered exception text behind a friendly TTS
+  // error — set alongside `_error` only for the generic/unexpected
+  // failure paths below. `_error` stays the calm, friendly message
+  // shown by default; this is only surfaced if the person deliberately
+  // taps "Details," so it doesn't clutter the normal UI, but a real
+  // error is only one tap away instead of permanently invisible.
+  String? _errorDetail;
   StreamSubscription<(int, int)?>? _queueProgressSub;
   String? _queueProgressLabel;
   Map<int, Highlight> _highlights = {};
@@ -140,7 +147,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       // Same raw-exception-dump bug found and fixed elsewhere in this
       // file/session — a local read failure here, so a generic message
       // covers every real cause.
-      setState(() => _error = 'Could not open that chapter. Try again.');
+      setState(
+          () => _error = 'Could not open that chapter. Try again.');
     } finally {
       setState(() => _loadingVerses = false);
     }
@@ -268,6 +276,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       _loadingAudio = true;
       _queueProgressLabel = null;
       _error = null;
+      _errorDetail = null;
     });
     _queueProgressSub?.cancel();
     _queueProgressSub =
@@ -340,26 +349,43 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     } on TtsModelNotReadyException catch (e) {
       // Not an error — the voice just isn't downloaded yet. Route to the
       // download picker instead of showing a generic error message.
-      setState(() => _error = null);
+      setState(() {
+        _error = null;
+        _errorDetail = null;
+      });
       _promptModelDownload(e.mmsCode);
     } on TtsLanguageUnavailableException {
-      setState(() =>
-          _error = 'No offline voice is available for this language yet.');
+      setState(() {
+        _error = 'No offline voice is available for this language yet.';
+        _errorDetail = null;
+      });
     } on SystemTtsTimeoutException {
       // See system_tts_engine.dart's doc comment: confirmed on a real
       // device that hitting Listen on the English Bible could hang
       // forever with the old unguarded flutter_tts call. This is that
       // same failure, now bounded and visible instead of an infinite
       // spinner.
-      setState(() =>
-          _error = "Your device's voice engine did not respond. Try again, or "
-              'check that a text-to-speech engine is installed and enabled '
-              "in your phone's settings.");
+      setState(() {
+        _error = "Your device's voice engine did not respond. Try again, or "
+            'check that a text-to-speech engine is installed and enabled '
+            "in your phone's settings.";
+        _errorDetail = null;
+      });
     } on TtsGenerationException catch (e) {
-      setState(() => _error = _friendlyTtsError(e));
+      setState(() {
+        _error = _friendlyTtsError(e);
+        // e.message already carries the real underlying exception text
+        // (tts_service.dart builds it as 'Could not generate audio: $e')
+        // — previously discarded entirely in favor of the generic
+        // message above, which made every real failure look identical
+        // and impossible to actually diagnose without device logs.
+        _errorDetail = e.message;
+      });
     } catch (e) {
-      setState(
-          () => _error = 'Something went wrong generating audio. Try again.');
+      setState(() {
+        _error = 'Something went wrong generating audio. Try again.';
+        _errorDetail = e.toString();
+      });
     } finally {
       setState(() {
         _loadingAudio = false;
@@ -375,6 +401,29 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   /// translate is genuine local synthesis failures.
   String _friendlyTtsError(TtsGenerationException e) {
     return 'Could not generate audio right now. Please try again.';
+  }
+
+  /// Shows the real underlying exception text in a selectable dialog —
+  /// so a real failure can actually be read and copied (to report back,
+  /// paste into a message, etc.) instead of the friendly message above
+  /// being the only thing anyone ever sees, which made every distinct
+  /// real failure indistinguishable from every other one.
+  void _showErrorDetail(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Error details'),
+        content: SingleChildScrollView(
+          child: SelectableText(_errorDetail ?? ''),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _promptModelDownload(String mmsCode) async {
@@ -480,8 +529,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           // actually matters for; Settings also gets a quick entry for
           // people who'd rather find it there.
           IconButton(
-            icon:
-                const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
+            icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
             tooltip: 'Text size',
             onPressed: () => _showFontSizeSheet(context),
           ),
@@ -599,8 +647,26 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           child: _error != null
               ? Padding(
                   padding: const EdgeInsets.all(12),
-                  child:
-                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!,
+                          style: const TextStyle(color: Colors.red)),
+                      if (_errorDetail != null)
+                        InkWell(
+                          onTap: () => _showErrorDetail(context),
+                          child: const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Text('Details',
+                                style: TextStyle(
+                                    color: Colors.red,
+                                    decoration: TextDecoration.underline,
+                                    fontSize: 12)),
+                          ),
+                        ),
+                    ],
+                  ),
                 )
               : const SizedBox(width: double.infinity),
         ),

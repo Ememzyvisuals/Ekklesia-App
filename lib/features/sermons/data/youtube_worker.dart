@@ -34,6 +34,14 @@ class YoutubeWorker {
   /// whatever screen wants to check it.
   static String? lastError;
 
+  /// The full, unfiltered `debugDetail` behind [lastError] — was being
+  /// computed correctly by youtube_repository.dart and then dropped
+  /// right here, same as [lastError] used to be dropped entirely one
+  /// level up. Exists so the Live/Sermon Library screens can offer a
+  /// "Details" tap target with the real exception text instead of only
+  /// ever showing the short friendly message.
+  static String? lastErrorDetail;
+
   void start({Duration interval = const Duration(minutes: 10)}) {
     stop();
     _refreshAndCaptureError(); // immediate first pull
@@ -45,8 +53,10 @@ class YoutubeWorker {
     switch (result) {
       case ResultFailure(failure: final f):
         lastError = f.message;
+        lastErrorDetail = f.debugDetail;
       case ResultSuccess():
         lastError = null;
+        lastErrorDetail = null;
       case ResultLoading():
         break;
     }

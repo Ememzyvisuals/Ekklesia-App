@@ -270,8 +270,7 @@ class _GamesScreenState extends State<GamesScreen> {
     await _addGameByUrl(title: title, url: rawUrl);
   }
 
-  Future<void> _addGameByUrl(
-      {required String title, required String url}) async {
+  Future<void> _addGameByUrl({required String title, required String url}) async {
     try {
       await UserAddedGamesRepository.instance.insert(title: title, url: url);
       if (!mounted) return;
@@ -419,6 +418,24 @@ class _GameGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
+      // Real, high-confidence bug found here: this GridView sits inside
+      // games_screen.dart's `ListView(children: [...])` — an unbounded-
+      // height context — with no `shrinkWrap`/`physics` override. A
+      // scrollable widget nested inside another scrollable like that is
+      // a well-documented Flutter layout conflict (the grid tries to
+      // size itself against infinite height); in a release build it
+      // doesn't necessarily show the debug-mode red error screen, it
+      // can just silently occupy zero space instead — which matches
+      // exactly what was reported: the "Added ..." toast confirms the
+      // game really did get added, but nothing ever appeared below the
+      // Bible Quiz card, for the bundled catalog too, in every
+      // screenshot across this whole project. `shrinkWrap: true` makes
+      // the grid size itself to its actual content instead of trying to
+      // fill unbounded space, and `NeverScrollableScrollPhysics` hands
+      // scrolling back to the outer ListView so the page scrolls as one
+      // unit instead of fighting over gestures.
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,

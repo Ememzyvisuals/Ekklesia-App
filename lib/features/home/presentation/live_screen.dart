@@ -39,6 +39,10 @@ class _LiveScreenState extends State<LiveScreen> {
   bool _isPlaying = false;
   bool _loading = false;
   String? _error;
+  // Same pattern as bible_screen.dart / ai_assistant_screen.dart's
+  // _errorDetail — friendly message by default, real exception text one
+  // tap away behind "Details."
+  String? _errorDetail;
 
   final _youtubeRepository = YoutubeRepository();
   YoutubePlayerController? _ytController;
@@ -48,6 +52,7 @@ class _LiveScreenState extends State<LiveScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorDetail = null;
     });
     try {
       if (_isPlaying &&
@@ -73,6 +78,7 @@ class _LiveScreenState extends State<LiveScreen> {
         setState(
             () => _error = "Couldn't start the stream. Try again in a moment.");
       }
+      setState(() => _errorDetail = e.toString());
     } finally {
       setState(() => _loading = false);
     }
@@ -118,6 +124,7 @@ class _LiveScreenState extends State<LiveScreen> {
                 // correctly but discarded, never reaching the UI at all.
                 // Now the real reason shows here if there is one.
                 final syncError = YoutubeWorker.lastError;
+                final syncErrorDetail = YoutubeWorker.lastErrorDetail;
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -133,9 +140,42 @@ class _LiveScreenState extends State<LiveScreen> {
                           color: AppTheme.textSecondary(context)),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(syncError != null
-                            ? "Couldn't check for a live stream: $syncError"
-                            : 'No live YouTube stream right now.'),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(syncError != null
+                                ? "Couldn't check for a live stream: $syncError"
+                                : 'No live YouTube stream right now.'),
+                            if (syncErrorDetail != null)
+                              InkWell(
+                                onTap: () => showDialog<void>(
+                                  context: context,
+                                  builder: (dialogContext) => AlertDialog(
+                                    title: const Text('Error details'),
+                                    content: SingleChildScrollView(
+                                      child: SelectableText(syncErrorDetail),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(dialogContext).pop(),
+                                        child: const Text('Close'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                child: const Padding(
+                                  padding: EdgeInsets.only(top: 4),
+                                  child: Text('Details',
+                                      style: TextStyle(
+                                          decoration:
+                                              TextDecoration.underline,
+                                          fontSize: 12)),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -216,7 +256,40 @@ class _LiveScreenState extends State<LiveScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  if (_errorDetail != null)
+                    InkWell(
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('Error details'),
+                          content: SingleChildScrollView(
+                            child: SelectableText(_errorDetail ?? ''),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('Details',
+                            style: TextStyle(
+                                color: Colors.red,
+                                decoration: TextDecoration.underline,
+                                fontSize: 12)),
+                      ),
+                    ),
+                ],
+              ),
             ),
 
           // Premium player card: a deep, subtly-graded green (not a flat

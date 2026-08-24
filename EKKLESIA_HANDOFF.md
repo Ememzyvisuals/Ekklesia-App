@@ -712,53 +712,102 @@ in the checked-out code.
 
 ---
 
+### 3.21 3.20's TTS/Radio/YouTube fixes did NOT resolve the reported symptoms — real games bug found, TTS/Radio/YouTube now instrumented instead of guessed at again
+Fresh screenshots after 3.20 shipped: TTS still "Could not generate audio
+right now" for **both** English and Yoruba (not the new, more specific
+messages 3.20's fixes should have produced), Radio still "Couldn't start
+the stream," YouTube still the old generic message, and — critically —
+added games (both by-link and by-.zip) still invisible even though the
+"Added ..." toast confirmed the insert genuinely succeeded this time.
+
+**Games — real root cause found, high confidence, different from 3.20's
+theory.** Since the insert demonstrably succeeded (no error toast, no
+silent failure), the earlier "missing database table" theory in 3.20 was
+not what's actually happening here. The real bug: `_GameGrid`'s
+`GridView.builder` in `games_screen.dart` has no `shrinkWrap`/`physics`
+override, and sits directly inside the screen's outer `ListView` —
+a well-known Flutter layout conflict (nesting one scrollable inside
+another's unbounded-height context). In debug mode this normally throws
+a visible red-screen layout exception; in a release build it can instead
+just silently occupy zero height. This explains why the grid area has
+been blank in literally every Games screenshot across this whole
+project, added game or not — the bundled catalog would have hit the
+exact same invisible failure if it ever had entries. Fixed: added
+`shrinkWrap: true, physics: const NeverScrollableScrollPhysics()`.
+3.20's database self-heal fix is left in place as harmless
+defense-in-depth, but should not be treated as the fix that mattered
+here.
+
+**TTS/Radio/YouTube — not re-fixed blind a third time. Instrumented
+instead.** Two guesses (3.15/3.16's original timeout fixes, then 3.20's
+follow-up) have now both failed to resolve what's actually happening on
+the device, which means guessing a third time without seeing the real
+exception text is not a responsible use of anyone's time. Concretely:
+English TTS showing the *generic* "Could not generate audio" message
+(not 3.20's new, more specific "voice engine did not respond" message)
+means the actual failure isn't the `SystemTtsTimeoutException` path 3.20
+targeted — it's a different exception being thrown somewhere in
+`synthesizeToFile()` that nothing has actually seen the text of yet.
+Rather than guess a fourth root cause, this batch adds a **"Details"**
+tap target next to every friendly error message that already had a real
+exception behind it and was discarding it (`tts_service.dart`'s
+`TtsGenerationException.message`, `YoutubeWorker.lastErrorDetail` now
+threaded through from `AppFailure.debugDetail` which existed but was
+never read, and the raw `e.toString()` on Radio's catch block) —
+covering Bible screen TTS, AI Assistant TTS playback, Live screen's
+Radio error, and Live screen's YouTube sync error. Tapping "Details"
+opens a selectable/copyable dialog with the real text. **Next step is
+mechanical, not another investigation**: have the person tap Details on
+whichever of these still fails and paste back exactly what it says —
+that will finally give a real root cause to work from instead of another
+plausible-sounding guess.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-1. **TTS fix (3.20) not yet confirmed on a real device.** Root cause
-   (missing `isFullPath: true`) is high-confidence — matches an open
-   flutter_tts upstream issue with the identical symptom exactly — but
-   "high-confidence via reading, no compiler available" is not the same
-   as "tested." Re-test English specifically first; the on-device
-   sherpa_onnx languages (Yoruba/Hausa/Pidgin) share the download-
-   integrity fix but not the `isFullPath` fix (that bug was
-   English/`system_tts_engine.dart`-specific), so if either still fails
-   after 3.20, treat them as separate investigations, not the same bug.
-2. **DCLM Radio fix (3.20) not yet confirmed on a real device.** 3.16's
-   "partially addressed, status unclear" is now resolved to "the timeout
-   genuinely was missing in the actual code, now added" — but still
-   needs a real test, not just a code read.
-3. **YouTube timeout fix (3.20) not yet confirmed.** Even if this
-   surfaces a fast, clear error now instead of hanging, the *underlying*
-   googleapis.com unreachability (if it really is network/carrier-level)
-   is not something a client-side fix can resolve — worth testing on a
-   different network (e.g. WiFi vs. the mobile carrier used for the
-   original screenshots) to confirm or rule that out.
-4. **"Add game by link" fix (3.20) not yet confirmed.** The root-cause
-   theory (schema version vs. actual tables drifting out of sync across
-   some earlier build) is plausible and the self-healing migration is a
-   reasonable defensive fix regardless of whether that exact history is
-   correct, but it's still a theory, not a confirmed diagnosis — if games
-   added by link still don't appear after this, the real error message
-   will now actually surface (it no longer fails silently), which should
-   make the next investigation much faster.
-5. **`parseBibleReference()` only supports English book names** — bookmarks/
+1. **TTS still genuinely broken — root cause unknown, now instrumented
+   (3.21).** 3.20's `isFullPath` fix did NOT resolve it: the person is
+   still seeing the *generic* "Could not generate audio" message for
+   English, not 3.20's new "voice engine did not respond" message, which
+   means the actual failure is a different exception than what 3.20
+   targeted. **Do not guess a fourth theory blind.** Every TTS error
+   screen now has a "Details" tap target showing the real exception
+   text (3.21) — get that text from the person first, then diagnose from
+   the actual error, not from re-reading flutter_tts's docs again.
+2. **DCLM Radio still genuinely broken — same story.** Still "Couldn't
+   start the stream" after 3.20's timeout addition. Either it's not
+   actually timing out (a different, faster failure) or the built APK
+   didn't contain 3.20's fix yet — the Details link (3.21) on this
+   error will show which. Don't assume the timeout theory was wrong
+   until that's confirmed either way.
+3. **YouTube still genuinely broken — same story.** Get the Details text
+   (3.21) before further diagnosis. Genuinely worth testing on a
+   different network too (WiFi vs. the mobile carrier in the original
+   screenshots) to help separate "still a client bug" from "network/
+   carrier really does block this."
+4. **`parseBibleReference()` only supports English book names** — bookmarks/
    search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
    to parse when jumped back to. Known, not yet fixed.
-6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+5. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
    that definitely includes that commit — last status check was "not sure
    if this build has the fix yet."
-7. **Per-verse TTS + synchronized highlight during audio playback** —
+6. **Per-verse TTS + synchronized highlight during audio playback** —
    explicitly requested (the person wants the specific verse currently
    being read aloud to highlight in real time, meaning TTS needs to
    generate/play per-verse rather than as one whole-chapter blob) — **not
-   started at all.**
-8. **Translations needing native-speaker review** (functional, not
+   started at all.** Blocked on TTS actually working at all first (#1).
+7. **Translations needing native-speaker review** (functional, not
    verified for naturalness/accuracy): the 5 companion accessibility
    labels per non-English language, and the prayer fallback templates for
    yo/ha/ig/pcm (3.8).
-9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+8. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
    reference screenshot's own "Tap or Drag" label, so treated as
    acceptable, not a bug).
+9. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
+   as the Live screen but wasn't given a "Details" link in 3.21 (only
+   Live screen was) — low priority since the same underlying error is
+   already visible with Details on Live.
 
 ## 5. Confirmed-Working / Closed Issues (do not re-investigate these)
 
