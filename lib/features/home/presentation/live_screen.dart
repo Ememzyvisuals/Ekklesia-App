@@ -169,8 +169,7 @@ class _LiveScreenState extends State<LiveScreen> {
                                   padding: EdgeInsets.only(top: 4),
                                   child: Text('Details',
                                       style: TextStyle(
-                                          decoration:
-                                              TextDecoration.underline,
+                                          decoration: TextDecoration.underline,
                                           fontSize: 12)),
                                 ),
                               ),
