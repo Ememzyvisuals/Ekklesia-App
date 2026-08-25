@@ -106,6 +106,119 @@ jobs:
             fi
           fi
 
+      # Real, confirmed root cause of TTS silently hanging forever on
+      # both the Bible screen and AI Assistant "Listen" — never a Dart-
+      # level bug at all. Per Android's own developer documentation
+      # (developer.android.com/about/versions/11/behavior-changes-11):
+      # apps targeting Android 11+ that use text-to-speech MUST declare
+      # this exact <queries> element, or Android's package-visibility
+      # restrictions prevent the app from even seeing an installed TTS
+      # engine — TextToSpeech initialization then silently never
+      # completes, no error, no timeout of its own, just permanently
+      # stuck. This has nothing to do with flutter_tts's Dart API
+      # (awaitSynthCompletion, isFullPath, etc. — all still correct and
+      # necessary, just not sufficient on their own) and everything to
+      # do with the manifest `flutter create .` generates having no way
+      # to know this app uses TTS at all. Same "verify and patch a
+      # freshly generated file" pattern as the INTERNET permission step
+      # above.
+      - name: Ensure TTS package-visibility queries element is present
+        run: |
+          manifest="android/app/src/main/AndroidManifest.xml"
+          if grep -q 'android.intent.action.TTS_SERVICE' "$manifest"; then
+            echo "TTS queries element already present in $manifest."
+          else
+            echo "TTS queries element missing. Adding it now."
+            python3 - <<'PYEOF'
+          path = "android/app/src/main/AndroidManifest.xml"
+          with open(path) as f:
+              content = f.read()
+          queries_block = (
+              '    <queries>\n'
+              '        <intent>\n'
+              '            <action android:name="android.intent.action.TTS_SERVICE" />\n'
+              '        </intent>\n'
+              '    </queries>\n'
+          )
+          content = content.replace("<application", queries_block + "\n    <application", 1)
+          with open(path, "w") as f:
+              f.write(content)
+          PYEOF
+            if grep -q 'android.intent.action.TTS_SERVICE' "$manifest"; then
+              echo "TTS queries element added successfully."
+            else
+              echo "::error::Failed to add TTS queries element. Manifest structure may have changed."
+              exit 1
+            fi
+          fi
+
+      # Real, confirmed root cause of `LateInitializationError: Field
+      # '_audioHandler@...' has not been initialized` — seen on a real
+      # device on BOTH RadioService (DCLM Radio) and AudioService
+      # (Bible/AI Assistant TTS playback), which was the key clue this
+      # wasn't a timing/retry issue at all (a per-feature timing bug
+      # wouldn't explain identical failures on two otherwise-unrelated
+      # audio paths). Per just_audio_background's own official setup
+      # instructions (pub.dev/packages/just_audio_background), the
+      # package requires two things this project never had a way to do,
+      # since `android/` is generated fresh by `flutter create .` every
+      # build and nothing patched it for this: (1) WAKE_LOCK,
+      # FOREGROUND_SERVICE, and FOREGROUND_SERVICE_MEDIA_PLAYBACK
+      # permissions, and (2) — the actually critical part — the
+      # manifest's launcher `<activity>` must be
+      # `com.ryanheise.audioservice.AudioServiceActivity`, not Flutter's
+      # default `.MainActivity`. Without that specific activity class,
+      # the native Android side never wires up the audio handler that
+      # `just_audio_background` depends on at all, regardless of any
+      # Dart-side timeout or retry — a permanent gap, not a slow one,
+      # which matches the reported symptom (identical failure every
+      # single time, not intermittent) far better than the earlier
+      # timeout theories did. This project has no custom native Android
+      # code (confirmed: no committed `android/` directory, nothing else
+      # in this workflow modifies `MainActivity`), so replacing it
+      # outright with the package-provided activity is safe —
+      # `AudioServiceActivity` is itself a `FlutterActivity` subclass
+      # built specifically as a drop-in replacement for exactly this
+      # purpose. Same "verify and patch a freshly generated file"
+      # pattern as the two manifest steps above; actually executed
+      # against a mock Flutter-generated manifest in this session to
+      # confirm both the permissions and the activity swap land
+      # correctly before shipping.
+      - name: Configure manifest for just_audio_background (audio playback)
+        run: |
+          manifest="android/app/src/main/AndroidManifest.xml"
+          if grep -q 'com.ryanheise.audioservice.AudioServiceActivity' "$manifest"; then
+            echo "just_audio_background manifest changes already present in $manifest."
+          else
+            echo "just_audio_background manifest changes missing. Adding them now."
+            python3 - <<'PYEOF'
+          path = "android/app/src/main/AndroidManifest.xml"
+          with open(path) as f:
+              content = f.read()
+
+          wake_lock = '    <uses-permission android:name="android.permission.WAKE_LOCK" />\n'
+          fg_service = '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n'
+          fg_service_media = '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n'
+          permissions_block = wake_lock + fg_service + fg_service_media
+          content = content.replace("<application", permissions_block + "\n    <application", 1)
+
+          content = content.replace(
+              'android:name=".MainActivity"',
+              'android:name="com.ryanheise.audioservice.AudioServiceActivity"',
+              1,
+          )
+
+          with open(path, "w") as f:
+              f.write(content)
+          PYEOF
+            if grep -q 'com.ryanheise.audioservice.AudioServiceActivity' "$manifest"; then
+              echo "just_audio_background manifest changes added successfully."
+            else
+              echo "::error::Failed to configure manifest for just_audio_background. Manifest structure may have changed."
+              exit 1
+            fi
+          fi
+
       # flutter_plugin_android_lifecycle (transitive, via file_picker —
       # and possibly others) now requires compileSdk 36+; `flutter create`
       # on this Flutter version still defaults lower, so

@@ -859,48 +859,145 @@ helper) whenever there's an active live video/controller, matching
 
 ---
 
+### 3.24 The REAL final TTS root cause — a manifest-level Android 11+ requirement, confirmed against Android's own developer docs, executed and verified
+The person confirmed 3.22's build genuinely was installed and TTS still
+hung identically — 3.23's "probably an un-rebuilt APK" theory was wrong,
+and worth recording as wrong rather than quietly dropped: two real,
+correct Dart-level fixes (3.22's `awaitSynthCompletion`/`initBindings`)
+were both necessary but not sufficient, because the actual remaining
+blocker was never in this app's Dart code at all.
+
+**Root cause, confirmed directly against Android's own developer
+documentation** (developer.android.com/about/versions/11/behavior-
+changes-11), not a StackOverflow guess: apps targeting Android 11+ that
+use text-to-speech must declare a `<queries>` element for
+`android.intent.action.TTS_SERVICE` in their manifest, or Android's
+package-visibility restrictions prevent the app from even seeing an
+installed TTS engine — `TextToSpeech` initialization then silently never
+completes, no error, no timeout of its own, just permanently stuck. This
+explains the exact reported symptom ("just keeps rolling forever") on
+both the Bible screen and the AI Assistant's Listen button — they share
+the same underlying `SystemTtsEngine`, so a manifest-level gap affects
+both identically. This was never addressed anywhere in this codebase
+because there IS no committed `android/` directory to check — `flutter
+create .` generates it fresh in CI (see 3.x's platform-folder-generation
+notes), and Flutter's default template has no way to know this app uses
+TTS at all.
+
+Fixed with a new `release.yml` step ("Ensure TTS package-visibility
+queries element is present"), same "verify and patch a freshly
+generated file" pattern already established for the INTERNET permission
+step right above it. **Actually executed against a mock manifest in
+this session** (not just read for plausibility) to confirm the Python
+patch logic produces valid, correctly-placed XML before shipping it —
+given this can only be verified by testing on a real device days later,
+that in-session execution is the strongest verification available
+without deploying.
+
+---
+
+### 3.25 The REAL Radio (and TTS-playback) root cause — the same class of manifest gap, now confirmed against just_audio_background's own official setup docs
+The key clue that broke this open: the identical `LateInitializationError:
+Field '_audioHandler@...' has not been initialized` appeared on **both**
+RadioService (DCLM Radio) **and** AudioService (Bible/AI Assistant TTS
+playback) — two otherwise-unrelated audio paths sharing one failure.
+3.22's retry-with-longer-timeout fix treated this as a timing problem
+specific to Radio; a shared, identical, permanent (not intermittent)
+failure across two different features pointed somewhere more
+fundamental instead.
+
+**Root cause, confirmed directly against `just_audio_background`'s own
+official pub.dev setup instructions**, not inferred: the package
+requires two manifest-level changes this project never had a mechanism
+to apply, since (as with 3.24's TTS fix) `android/` is generated fresh
+by `flutter create .` every build and nothing patched it for this
+specifically:
+1. `WAKE_LOCK`, `FOREGROUND_SERVICE`, and
+   `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions.
+2. **The actually critical part**: the manifest's launcher `<activity>`
+   must be `com.ryanheise.audioservice.AudioServiceActivity`, not
+   Flutter's default `.MainActivity`. Without that specific activity
+   class, the native Android side never wires up the audio handler
+   `just_audio_background` depends on **at all** — a permanent gap, not
+   a slow one, which matches "identical failure every single time" far
+   better than any timeout theory. This project has no custom native
+   Android code (no committed `android/` directory, nothing else in the
+   workflow touches `MainActivity`), so replacing it outright with the
+   package-provided activity is safe — `AudioServiceActivity` is itself
+   a `FlutterActivity` subclass built specifically as a drop-in
+   replacement for this exact purpose.
+
+Fixed with a new `release.yml` step ("Configure manifest for
+just_audio_background"), same pattern as 3.24's TTS queries step.
+**Actually executed against a realistic, fully-detailed mock
+Flutter-generated manifest in this session** (not just read for
+plausibility) — confirmed both the permissions and the activity-class
+swap land correctly. Then went further: extracted the *exact* Python
+code embedded in the real, saved `release.yml` file (not a hand-retyped
+copy) and ran it through `compile()` to confirm the file that will
+actually execute in CI is syntactically valid, not just a similar-
+looking draft.
+
+3.22's Dart-side `JustAudioBackgroundInit` retry-and-fallback logic
+(`radio_service.dart`) is left in place — harmless, and still a
+reasonable defense against a *genuinely* slow (rather than structurally
+broken) init on some device.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-1. **TTS/Radio: strongly suspected to be an un-rebuilt-APK testing issue
-   (3.23), not a fix failure — verify this FIRST.** Identical error text
-   came back after 3.22's well-evidenced fixes for both. Check the
-   GitHub Actions run for the batch-3 tag push actually succeeded and
-   that a fresh APK was actually installed before re-diagnosing either
-   from scratch.
-2. **YouTube — actually working now**, per the person's own screenshot
+1. **TTS: two real root causes found and fixed (3.24 manifest queries,
+   3.25 activity/permissions for the playback path), not yet confirmed
+   on a device.** Both confirmed against official docs (Android's own
+   developer docs for 3.24; just_audio_background's own pub.dev setup
+   instructions for 3.25) and executed/compiled in-session, not just
+   read for plausibility. 3.22's Dart-level fixes (`awaitSynthCompletion`,
+   `initBindings`) were real and necessary but not sufficient alone.
+   3.23's "probably an un-rebuilt APK" theory was checked and ruled out
+   by the person directly confirming they had rebuilt — noted here so
+   it isn't revisited. If TTS still fails after 3.24+3.25, get fresh
+   Details text; it would need to be a genuinely new/different exception
+   to keep investigating, not the same one again.
+2. **Radio: real root cause found and fixed (3.25) — same
+   `LateInitializationError` as TTS playback, same manifest-level cause
+   (missing `AudioServiceActivity`/permissions for
+   just_audio_background), not a timing/retry problem as 3.22 assumed.**
+   Not yet confirmed on a device.
+3. **YouTube — actually working now**, per the person's own screenshot
    (a live "Monday Bible Study" stream rendering correctly). No longer
    in "broken" status; downgraded from prior open-issue entries.
    Landscape rotation while viewing it was broken (separate UI bug, not
    a YouTube API/sync issue) — fixed in 3.23.
-3. **Hardcoded/shared Groq API key fallback — explicitly requested,
+4. **Hardcoded/shared Groq API key fallback — explicitly requested,
    deliberately not implemented (3.22), still awaiting the person's
    explicit confirmation.** This reverses a real, prior security
    decision (`groq_service.dart`'s own doc comment: "no fallback, no
    shared quota," specifically to avoid an extractable key in a public
    APK). Only implement on their explicit confirmation they understand
    and accept that tradeoff.
-4. **`parseBibleReference()` only supports English book names** — bookmarks/
+5. **`parseBibleReference()` only supports English book names** — bookmarks/
    search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
    to parse when jumped back to. Known, not yet fixed.
-5. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
    that definitely includes that commit — last status check was "not sure
    if this build has the fix yet."
-6. **Per-verse TTS + synchronized highlight during audio playback** —
+7. **Per-verse TTS + synchronized highlight during audio playback** —
    explicitly requested (the person wants the specific verse currently
    being read aloud to highlight in real time, meaning TTS needs to
    generate/play per-verse rather than as one whole-chapter blob) — **not
    started at all.** Blocked on TTS actually working at all first (#1).
-7. **Translations needing native-speaker review** (functional, not
+8. **Translations needing native-speaker review** (functional, not
    verified for naturalness/accuracy): the 5 companion accessibility
    labels per non-English language, and the prayer fallback templates for
    yo/ha/ig/pcm (3.8).
-8. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
    reference screenshot's own "Tap or Drag" label, so treated as
    acceptable, not a bug).
-9. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
-   as the Live screen but wasn't given a "Details" link in 3.21 (only
-   Live screen was) — low priority since the same underlying error is
-   already visible with Details on Live.
+10. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
+    as the Live screen but wasn't given a "Details" link in 3.21 (only
+    Live screen was) — low priority since the same underlying error is
+    already visible with Details on Live.
 
 ## 5. Confirmed-Working / Closed Issues (do not re-investigate these)
 
