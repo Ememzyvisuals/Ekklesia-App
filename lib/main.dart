@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoLocalizations;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 import 'core/config/app_theme.dart';
 import 'core/config/app_router.dart';
@@ -15,7 +14,6 @@ import 'core/services/conversation_worker.dart';
 import 'core/services/cleanup_worker.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/isar_service.dart';
-import 'core/services/radio_service.dart';
 import 'features/sermons/data/youtube_worker.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
@@ -30,41 +28,23 @@ Future<void> main() async {
   // --dart-define=YOUTUBE_API_KEY (see AppConfig.youtubeApiKey). Nothing
   // left for a client-side .env file to hold.
 
-  // Enables lock-screen / notification-shade playback controls for radio
-  // and sermon audio — this is the reliability feature the official DCLM
-  // app doesn't have.
-  //
-  // Timeout-guarded (see the same reasoning on IsarService.open() below):
-  // a native platform-channel call hanging here would freeze the splash
-  // screen forever with zero error, zero crash, before runApp() is ever
-  // reached — exactly what got reported after the first real-device
-  // install. Losing lock-screen audio controls on a device where this
-  // genuinely can't initialize is a minor, recoverable degradation; an
-  // app that never opens is not.
-  try {
-    await JustAudioBackground.init(
-      androidNotificationChannelId: 'com.ememzyvisuals.ekklesia.audio',
-      androidNotificationChannelName: 'Ekklesia Audio',
-      androidNotificationOngoing: true,
-    ).timeout(const Duration(seconds: 12));
-    JustAudioBackgroundInit.markSucceeded();
-  } catch (_) {
-    // Audio still plays without this — only lock-screen/notification
-    // controls are lost, never worth blocking app startup over.
-    //
-    // Real bug found here and fixed via JustAudioBackgroundInit
-    // (core/services/radio_service.dart): this failure was being
-    // swallowed with no record of it anywhere, so RadioService went on
-    // to create a MediaItem-tagged AudioPlayer assuming background
-    // audio setup had succeeded when it demonstrably hadn't — confirmed
-    // on a real device as `LateInitializationError: Field
-    // '_audioHandler@...' has not been initialized`, thrown by
-    // just_audio_background's own internals the moment radio playback
-    // was attempted. Marking the failure here lets RadioService retry
-    // (with a much more generous timeout, since by then it's blocking
-    // one explicit user action rather than the whole app's startup)
-    // before it ever tries to use a MediaItem-tagged player.
-  }
+  // Enabled lock-screen / notification-shade playback controls for radio
+  // and sermon audio via `just_audio_background`, removed entirely (see
+  // pubspec.yaml's comment on the dependency for the full reasoning):
+  // confirmed on a real device across six straight rounds that calling
+  // `JustAudioBackground.init()` anywhere in the app — succeeding or
+  // failing — left every single `AudioPlayer` created anywhere in the
+  // app (Radio, TTS generation, TTS playback, not just ones that opt
+  // into MediaItem tagging) permanently throwing
+  // `LateInitializationError: Field '_audioHandler@...' has not been
+  // initialized`, even after three independently-researched,
+  // in-session-executed manifest fixes targeting it. That failure
+  // signature — identical, permanent, and spanning every audio feature
+  // in the app rather than just the one that explicitly asked for
+  // background/lock-screen integration — is what made clear this
+  // wasn't a misconfiguration worth chasing a fourth time. Plain
+  // `just_audio` (still in use everywhere below) needs no equivalent
+  // native Android setup and has had none of these failures.
 
   // Firebase/Firestore removed entirely — the app is offline-first now.
   // Every feature that used to live in Firestore (notifications, quiz

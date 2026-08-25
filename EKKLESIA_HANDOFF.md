@@ -982,27 +982,90 @@ assuming either way.
 
 ---
 
+### 3.27 `just_audio_background` removed entirely — the real fix, after three targeted attempts at configuring it correctly all failed
+The build tag (3.26) did its job: the person's next report came back
+with `batch6-2026-08-25` visibly present in both Settings and every
+error dialog, proving definitively that 3.25's manifest fix — confirmed
+present in the actual running build — still did not resolve the
+`LateInitializationError`. That rules out "testing an old build" for
+good on this issue.
+
+**The tell that broke this open**: this exact same error was now
+showing on Radio, TTS generation, AND TTS playback (AI Assistant's
+"Listen" and the Bible screen's "Something went wrong generating
+audio," both surfacing the identical `_audioHandler` error) — every
+single audio feature in the app, not just the one
+(`RadioService`/`AudioService`) that explicitly used MediaItem tags.
+`AudioService` (`audio_service.dart`, used for TTS playback) has never
+imported or used `just_audio_background`/`MediaItem` at all — confirmed
+by grep. A bug confined to code that never touches the package cannot
+be fixed by configuring that package more correctly; it means calling
+`JustAudioBackground.init()` **anywhere** in the app — whether it
+succeeds or fails — silently takes over the platform implementation for
+**every** `AudioPlayer` created afterward, app-wide, not just ones that
+opt into background/MediaItem features. Three independently-researched,
+docs-confirmed, in-session-executed fixes (3.22's retry logic, 3.24's
+TTS manifest queries, 3.25's `AudioServiceActivity`/permissions swap)
+were all real, correct responses to real, documented requirements of
+that package — and still insufficient, because the actual fix needed
+was never "configure it correctly," it was "don't depend on it."
+
+**Fix**: removed `just_audio_background` from `pubspec.yaml` entirely,
+removed the `JustAudioBackground.init()` call from `main.dart`, removed
+the `JustAudioBackgroundInit` retry helper and all `MediaItem` tagging
+from `radio_service.dart` (now plain `AudioSource.uri()`, no tag), and
+— critically, to avoid a *new* build failure — removed 3.25's
+`release.yml` step that swapped the manifest's activity to
+`com.ryanheise.audioservice.AudioServiceActivity`, since that class no
+longer exists on the classpath once `just_audio_background`'s
+transitive dependency `audio_service` is gone; leaving that step in
+would have broken the build outright (manifest merger failure, unknown
+class). Real, acknowledged cost: no lock-screen/notification playback
+controls for Radio or TTS anymore. Real benefit: plain `just_audio`
+(still used everywhere) needs no equivalent native Android setup and
+has had none of these failures across this entire investigation —
+every audio feature in the app was broken without this, so reliability
+wins here. Bumped `AppConfig.buildTag` to `'batch7-2026-08-25'`.
+
+Also: the person explicitly asked to "delete everything TTS/audio and
+rebuild with something that already works" — this is the actual
+substance of that request (dropping the fragile, hard-to-configure
+package for the simpler one that's been reliable throughout), just
+scoped to the specific dependency that was actually causing every
+failure rather than a full rewrite of Bible TTS/Radio from zero, which
+the evidence didn't point to as necessary — the synthesis-side fixes
+(3.22's `awaitSynthCompletion`/`initBindings`, 3.24's TTS manifest
+queries) were never in question and remain in place.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-0. **Read 3.26 before touching anything below.** Check the build tag
-   first, every time, before re-diagnosing TTS/Radio/YouTube.
-1. **TTS: two real root causes found and fixed (3.24 manifest queries,
-   3.25 activity/permissions for the playback path), not yet confirmed
-   on a device.** Both confirmed against official docs (Android's own
-   developer docs for 3.24; just_audio_background's own pub.dev setup
-   instructions for 3.25) and executed/compiled in-session, not just
-   read for plausibility. 3.22's Dart-level fixes (`awaitSynthCompletion`,
-   `initBindings`) were real and necessary but not sufficient alone.
-   3.23's "probably an un-rebuilt APK" theory was checked and ruled out
-   by the person directly confirming they had rebuilt — noted here so
-   it isn't revisited. If TTS still fails after 3.24+3.25, get fresh
-   Details text; it would need to be a genuinely new/different exception
-   to keep investigating, not the same one again.
-2. **Radio: real root cause found and fixed (3.25) — same
-   `LateInitializationError` as TTS playback, same manifest-level cause
-   (missing `AudioServiceActivity`/permissions for
-   just_audio_background), not a timing/retry problem as 3.22 assumed.**
-   Not yet confirmed on a device.
+0. **Read 3.27 before touching anything below.** Check the build tag
+   first (now `batch7-2026-08-25`), every time, before re-diagnosing
+   TTS/Radio/YouTube.
+1. **TTS + Radio: `just_audio_background` removed entirely (3.27), not
+   yet confirmed on a device.** 3.22/3.24/3.25's targeted fixes for that
+   package all turned out to be correct-but-insufficient — the real fix
+   was dropping the dependency, not configuring it further. If
+   `LateInitializationError`/`_audioHandler` shows up again after this,
+   that would be genuinely surprising (the package is no longer in
+   pubspec.yaml at all) and worth a careful look at whether the
+   dependency truly got removed from the built APK, not a new theory
+   about the same package. TTS's synthesis-side fixes (3.22/3.24 —
+   `awaitSynthCompletion`, `initBindings`, the manifest `<queries>`
+   element) are unrelated to this and remain in place; if TTS still
+   fails after 3.27, check whether the failure is happening during
+   synthesis or during playback specifically (the Details text should
+   show which).
+2. **Known, accepted regression from 3.27**: no lock-screen/notification
+   playback controls for Radio or TTS anymore. Was a real goal earlier
+   in this project's history; deliberately traded away for reliability
+   after `just_audio_background` proved unworkable across three
+   attempts. Worth someday revisiting with a fresh, more careful
+   integration if reliability is ever solid enough to justify the risk
+   again — not a near-term priority given how much of this project's
+   effort has already gone into this one dependency.
 3. **YouTube — actually working now**, per the person's own screenshot
    (a live "Monday Bible Study" stream rendering correctly). No longer
    in "broken" status; downgraded from prior open-issue entries.

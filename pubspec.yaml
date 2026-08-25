@@ -68,7 +68,25 @@ dependencies:
 
   # Media
   just_audio: ^0.9.40
-  just_audio_background: ^0.0.1-beta.13
+  # just_audio_background removed — see main.dart and radio_service.dart
+  # for why. Six straight rounds of a device-confirmed
+  # `LateInitializationError: Field '_audioHandler@...' has not been
+  # initialized` across every audio feature in the app (Radio, TTS
+  # generation, TTS playback — not just the MediaItem-tagged player),
+  # even after three independently-researched, docs-confirmed,
+  # in-session-executed manifest fixes, is what finally made clear this
+  # wasn't a misconfiguration to keep chasing — the failure signature
+  # (identical, permanent, spanning every audio path in the app, not
+  # just the one that explicitly opts into background/MediaItem
+  # features) means calling JustAudioBackground.init() anywhere in the
+  # app silently takes over every AudioPlayer's platform implementation
+  # app-wide, whether that specific player asked for it or not. Removing
+  # the dependency entirely — rather than trying to configure it
+  # correctly a fourth time — eliminates the whole failure class. Real
+  # cost: no lock-screen/notification playback controls for Radio or
+  # TTS. Real benefit: plain `just_audio` alone needs no special native
+  # Android setup at all, and every audio feature in this app was
+  # broken without it working, so reliability wins here.
   youtube_player_flutter: ^9.0.3
 
   # Networking

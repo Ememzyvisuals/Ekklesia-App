@@ -17,7 +17,7 @@ class AppConfig {
   /// an old APK was still what got tested. Bump this string every time a
   /// new batch of fixes ships. Shown in Settings and appended to every
   /// "Error details" dialog across the app.
-  static const String buildTag = 'batch6-2026-08-25';
+  static const String buildTag = 'batch7-2026-08-25';
 
   // wazobiaVoiceSpaceUrl/yarnGptSpaceUrl removed (PROJECT_MIGRATION_AUDIT.md
   // Phase 5) — TTS is fully on-device now (sherpa_onnx + MMS models,
@@ -105,12 +105,10 @@ class AppConfig {
   static const String dclmNowPlayingBaseUrl =
       'https://stat1.dclm.org/api/nowplaying';
 
-  /// Single source of truth for radio language display names — shared by
-  /// live_screen.dart's language picker and RadioService's MediaItem
-  /// title, so the two can't drift out of sync the way they would if
-  /// each kept its own separate label switch statement. Covers all 18
-  /// verified DCLM language streams ([dclmStreams] + [dclmExtraStreams]),
-  /// not just the 4 that used to be wired into the picker.
+  /// Single source of truth for radio language display names — used by
+  /// live_screen.dart's language picker. Covers all 18 verified DCLM
+  /// language streams ([dclmStreams] + [dclmExtraStreams]), not just the
+  /// 4 that used to be wired into the picker.
   static const Map<String, String> dclmLanguageLabels = {
     'english': 'English',
     'yoruba': 'Yoruba',

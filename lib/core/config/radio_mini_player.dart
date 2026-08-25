@@ -10,11 +10,12 @@ import '../config/app_theme.dart';
 /// once playback has started — not just on the Live screen.
 ///
 /// This is the "own particular navigation" for radio control that was
-/// explicitly asked for: previously, pausing or resuming radio meant
-/// navigating back to the Live tab specifically, since RadioService kept
-/// playing in the background (confirmed working — that part was
-/// already correct, lock-screen controls exist via
-/// just_audio_background) but had no in-app surface anywhere else. This
+/// explicitly asked for: this in-app mini-player is what actually keeps
+/// radio control reachable from any tab now — lock-screen controls via
+/// `just_audio_background` were tried and removed (see radio_service.dart
+/// and pubspec.yaml's comments) after they broke every audio feature in
+/// the app on a real device, so this widget carries that responsibility
+/// alone rather than as a supplement to lock-screen controls. This
 /// widget listens to RadioService directly and only renders anything
 /// once a language has actually been selected for playback — silent and
 /// takes no space otherwise.
