@@ -945,8 +945,47 @@ broken) init on some device.
 
 ---
 
+### 3.26 Added a visible build tag — stop guessing about "did you rebuild" entirely
+3.25's fix still came back with the **literal identical**
+`LateInitializationError` text (same object hash, `@1072018634`, both
+times) after the person explicitly confirmed they'd rebuilt and
+reinstalled. Several rounds now have hinged on "is this genuinely the
+same bug, or an old APK" with no fast way to know for certain — that
+ambiguity itself is now the biggest blocker to real progress, worse
+than any individual bug.
+
+Added `AppConfig.buildTag` (a plain string, bump it every batch —
+currently `'batch6-2026-08-25'`), surfaced in two places: a "Build" row
+in Settings, and appended automatically to every "Error details" dialog
+across the app (Bible screen, AI Assistant, Live screen's Radio and
+YouTube errors). **Going forward: before diagnosing any bug report,
+check that the build tag in the screenshot/Settings matches what was
+most recently shipped.** If it doesn't, the conversation is "please
+rebuild and reinstall," not "let me re-investigate this bug" — no
+exceptions, and no more relying on the person's own belief that they
+rebuilt (they can genuinely believe it and still be wrong, e.g. an
+Actions build that failed silently from their perspective, a stale
+browser download, an APK that didn't actually reinstall over the old
+one).
+
+Also clarified for the record: the person's report that "YouTube is
+broken again, you tampered with it" doesn't match what actually
+happened — no batch since 3.21 has touched `youtube_repository.dart` or
+`youtube_worker.dart` (their fetch/sync logic). 3.23's landscape fix
+only restructured `live_screen.dart`'s widget tree; it didn't change
+when or how often syncs happen. A prior screenshot from this same
+person showed YouTube correctly rendering a live stream after that
+fix. Without Details text for this specific occurrence it's unknown
+whether this is a real regression or just "no live stream currently
+running" (a normal, correct empty state) — get the Details text before
+assuming either way.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
+0. **Read 3.26 before touching anything below.** Check the build tag
+   first, every time, before re-diagnosing TTS/Radio/YouTube.
 1. **TTS: two real root causes found and fixed (3.24 manifest queries,
    3.25 activity/permissions for the playback path), not yet confirmed
    on a device.** Both confirmed against official docs (Android's own

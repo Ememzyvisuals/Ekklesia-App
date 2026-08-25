@@ -198,7 +198,8 @@ class _LiveScreenState extends State<LiveScreen> {
                                 builder: (dialogContext) => AlertDialog(
                                   title: const Text('Error details'),
                                   content: SingleChildScrollView(
-                                    child: SelectableText(syncErrorDetail),
+                                    child: SelectableText(
+                                        '$syncErrorDetail\n\n(build: ${AppConfig.buildTag})'),
                                   ),
                                   actions: [
                                     TextButton(
@@ -300,7 +301,8 @@ class _LiveScreenState extends State<LiveScreen> {
                         builder: (dialogContext) => AlertDialog(
                           title: const Text('Error details'),
                           content: SingleChildScrollView(
-                            child: SelectableText(_errorDetail ?? ''),
+                            child: SelectableText(
+                                '${_errorDetail ?? ''}\n\n(build: ${AppConfig.buildTag})'),
                           ),
                           actions: [
                             TextButton(

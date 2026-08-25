@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart' show PlayerState;
 
 import '../../../core/config/app_theme.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/services/tts_service.dart';
 import '../../../core/services/local_tts_engine.dart'
     show TtsModelNotReadyException;
@@ -147,7 +148,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       // Same raw-exception-dump bug found and fixed elsewhere in this
       // file/session — a local read failure here, so a generic message
       // covers every real cause.
-      setState(() => _error = 'Could not open that chapter. Try again.');
+      setState(
+          () => _error = 'Could not open that chapter. Try again.');
     } finally {
       setState(() => _loadingVerses = false);
     }
@@ -413,7 +415,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Error details'),
         content: SingleChildScrollView(
-          child: SelectableText(_errorDetail ?? ''),
+          child: SelectableText(
+              '${_errorDetail ?? ''}\n\n(build: ${AppConfig.buildTag})'),
         ),
         actions: [
           TextButton(
@@ -528,8 +531,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           // actually matters for; Settings also gets a quick entry for
           // people who'd rather find it there.
           IconButton(
-            icon:
-                const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
+            icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
             tooltip: 'Text size',
             onPressed: () => _showFontSizeSheet(context),
           ),
@@ -651,7 +653,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      Text(_error!,
+                          style: const TextStyle(color: Colors.red)),
                       if (_errorDetail != null)
                         InkWell(
                           onTap: () => _showErrorDetail(context),

@@ -11,6 +11,7 @@ import '../../../core/services/groq_providers.dart';
 import '../../../core/services/user_groq_key_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/config/app_theme.dart';
+import '../../../core/config/app_config.dart';
 import '../../profile/data/profile_providers.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../bible/presentation/voice_download_sheet.dart';
@@ -124,8 +125,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.text_fields),
             title: const Text('Text size'),
-            subtitle: Text(
-                '${(ref.watch(fontScaleProvider) * 100).round()}% — applies app-wide'),
+            subtitle: Text('${(ref.watch(fontScaleProvider) * 100).round()}% — applies app-wide'),
             trailing: const Icon(Icons.chevron_right),
             // Same control as the Bible screen's "Aa" button — added
             // here too since not everyone will find it on the Bible
@@ -240,6 +240,17 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.info_outline),
             title: Text(l10n.settingsCredits),
             subtitle: Text(l10n.settingsCreditsSubtitle),
+          ),
+          // Lets the person testing a build and the developer confirm
+          // they're both looking at the same code, without a round of
+          // "did you rebuild?" guessing — added after several rounds of
+          // TTS/Radio bug reports kept showing literally identical error
+          // text with no fast way to tell whether that meant a fix
+          // hadn't worked or an old APK was still what got tested.
+          ListTile(
+            leading: const Icon(Icons.build_outlined),
+            title: const Text('Build'),
+            subtitle: Text(AppConfig.buildTag),
           ),
         ],
       ),

@@ -14,6 +14,7 @@ import '../../../core/services/download_worker.dart';
 import '../../../core/services/user_groq_key_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/config/app_theme.dart';
+import '../../../core/config/app_config.dart';
 import '../data/conversation_repository.dart';
 import '../domain/conversation.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
@@ -468,8 +469,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                                       : MarkdownText(
                                           entry.text,
                                           baseStyle: TextStyle(
-                                              color: AppTheme.textPrimary(
-                                                  context)),
+                                              color:
+                                                  AppTheme.textPrimary(
+                                                      context)),
                                         ),
                                   if (!isUser) ...[
                                     const SizedBox(height: 6),
@@ -585,7 +587,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                               builder: (dialogContext) => AlertDialog(
                                 title: const Text('Error details'),
                                 content: SingleChildScrollView(
-                                  child: SelectableText(_errorDetail ?? ''),
+                                  child: SelectableText(
+                                      '${_errorDetail ?? ''}\n\n(build: ${AppConfig.buildTag})'),
                                 ),
                                 actions: [
                                   TextButton(

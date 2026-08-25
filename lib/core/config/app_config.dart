@@ -7,6 +7,18 @@
 class AppConfig {
   AppConfig._();
 
+  /// A visible marker so the person testing a build and the developer
+  /// diagnosing it can both immediately confirm they're looking at the
+  /// same code, without relying on "did you rebuild?" back-and-forth —
+  /// added specifically because several rounds of fixes for the exact
+  /// same TTS/Radio `LateInitializationError` kept coming back with
+  /// literally identical error text, and there was no fast, certain way
+  /// to tell whether that meant a fix genuinely didn't work or whether
+  /// an old APK was still what got tested. Bump this string every time a
+  /// new batch of fixes ships. Shown in Settings and appended to every
+  /// "Error details" dialog across the app.
+  static const String buildTag = 'batch6-2026-08-25';
+
   // wazobiaVoiceSpaceUrl/yarnGptSpaceUrl removed (PROJECT_MIGRATION_AUDIT.md
   // Phase 5) — TTS is fully on-device now (sherpa_onnx + MMS models,
   // system TTS for English). No cloud TTS engine remains in this app.
