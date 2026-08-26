@@ -1,0 +1,82 @@
+name: Package African-Language Audio Bibles
+
+# Manually triggered — see audio-bible-english.yml's comment for why.
+# This workflow's dataset-loading step has NOT been run before (see
+# scripts/package_african.py's own warning at the top) — start with a
+# single language and watch the log carefully, especially any
+# "unmapped book name" warnings, before treating this as working.
+on:
+  workflow_dispatch:
+    inputs:
+      languages:
+        description: >
+          Comma-separated AfriSpeech config names to package, e.g.
+          "Yoruba" or "Yoruba,Igbo,Hausa". Config names are
+          case-sensitive — must match the dataset's actual config names
+          exactly.
+        required: true
+        default: "Yoruba"
+
+jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.set.outputs.languages }}
+    steps:
+      - id: set
+        env:
+          LANGUAGES_INPUT: ${{ github.event.inputs.languages }}
+        run: |
+          languages=$(python3 -c "
+          import json, os
+          raw = os.environ['LANGUAGES_INPUT']
+          print(json.dumps([n.strip() for n in raw.split(',') if n.strip()]))
+          ")
+          echo "languages=$languages" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: determine-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config_name: ${{ fromJSON(needs.determine-matrix.outputs.languages) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install --upgrade datasets huggingface_hub soundfile
+
+      - name: Map config name to language code
+        id: lang_code
+        env:
+          CONFIG_NAME: ${{ matrix.config_name }}
+        run: |
+          code=$(python3 -c "
+          import os
+          # Extend this mapping if more AfriSpeech configs get added
+          # later — kept tiny and explicit rather than auto-derived
+          # (e.g. lowercasing the first two letters), since a wrong
+          # 2-letter code would silently misfile an entire language's
+          # releases under the wrong tag prefix.
+          codes = {'Yoruba': 'yo', 'Igbo': 'ig', 'Hausa': 'ha'}
+          name = os.environ['CONFIG_NAME']
+          if name not in codes:
+              raise SystemExit(
+                  f'::error::No language code mapping for config '
+                  f'{name!r} — add it to the codes dict in this workflow '
+                  f'step before running.'
+              )
+          print(codes[name])
+          ")
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Package ${{ matrix.config_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 audio_bible/scripts/package_african.py "${{ matrix.config_name }}" "${{ steps.lang_code.outputs.code }}"

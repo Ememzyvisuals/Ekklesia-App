@@ -1,0 +1,71 @@
+name: Package English (KJV) Audio Bible
+
+# Manually triggered, not on every push — this downloads and re-uploads
+# potentially several GB of audio and creates/updates up to 66 releases.
+# Not something that should ever run automatically on a code push.
+on:
+  workflow_dispatch:
+    inputs:
+      book_numbers:
+        description: >
+          Comma-separated book numbers to (re)package, or "all" for every
+          book 1-66. Start with a single book (e.g. "1") to verify the
+          pipeline actually works end-to-end before running all 66 —
+          this workflow has NOT been run before, only the underlying
+          zip-extraction logic has been tested locally against real
+          downloaded data.
+        required: true
+        default: "1"
+
+jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      books: ${{ steps.set.outputs.books }}
+    steps:
+      - id: set
+        env:
+          # Routed through env: rather than interpolated directly into
+          # the script body below — directly substituting
+          # `${{ github.event.inputs.* }}` into a shell script is a
+          # known GitHub Actions script-injection risk (the value is
+          # substituted as raw text before the shell ever runs). Low
+          # real risk here since workflow_dispatch inputs can only come
+          # from someone with write access to this repo, but there's no
+          # reason not to do it the safe way regardless.
+          BOOK_NUMBERS_INPUT: ${{ github.event.inputs.book_numbers }}
+        run: |
+          if [ "$BOOK_NUMBERS_INPUT" = "all" ]; then
+            books=$(python3 -c "import json; print(json.dumps(list(range(1,67))))")
+          else
+            books=$(python3 -c "
+          import json, os
+          raw = os.environ['BOOK_NUMBERS_INPUT']
+          print(json.dumps([int(n.strip()) for n in raw.split(',') if n.strip()]))
+          ")
+          fi
+          echo "books=$books" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: determine-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      # Modest concurrency, not "as many as possible" — this is
+      # downloading/uploading real audio data, and being gentle with
+      # both eliranwong's repo and this repo's own release API is more
+      # important than raw speed for a one-time packaging job.
+      max-parallel: 4
+      fail-fast: false
+      matrix:
+        book_number: ${{ fromJSON(needs.determine-matrix.outputs.books) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package book ${{ matrix.book_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 audio_bible/scripts/package_english.py ${{ matrix.book_number }}
