@@ -1039,26 +1039,102 @@ queries) were never in question and remain in place.
 
 ---
 
+### 3.28 3.27 confirmed working (no more LateInitializationError anywhere) — new, more specific bugs found and fixed; YouTube traced to a likely repo-secret gap
+The person's next report confirmed 3.27 was the right call: **zero
+`LateInitializationError` occurrences across six fresh screenshots**,
+including Radio actually playing audio and correctly continuing in the
+background when the screen locked — a real, working feature the
+project has wanted since early on. What's left are different, more
+specific, real bugs:
+
+- **Radio: audio plays but the UI shows a stuck buffering spinner, then
+  wrongly claims "you're offline" while audio is audibly still
+  playing.** Two separate real bugs, both fixed: (1) the play button's
+  `onTap` was disabled for as long as `ProcessingState.buffering` was
+  true, and a live Icecast-style stream on weak (1-2 bar) signal
+  legitimately flickers in and out of that state on its own well after
+  playback has genuinely started — the button was correct to show a
+  spinner, wrong to also block interaction the whole time. Now only the
+  initial connect (`_loading`) blocks tapping. (2) `radio_service.dart`'s
+  own 15s `setAudioSource`/`play` timeout was firing on a connection
+  that was slow but genuinely working (confirmed: the person heard
+  audio playing at the exact moment the "you're offline" message
+  appeared) — bumped to 30s, and a plain `TimeoutException` now gets an
+  accurate "taking longer than usual, may still start playing" message
+  instead of being lumped in with genuine connectivity failures
+  (`SocketException`, host lookup failure).
+- **Sherpa-onnx TTS: "keeps loading forever," confirmed by the person to
+  be a property of the shared sherpa-onnx code path, not one specific
+  language** — correct architectural read on their part, confirmed by
+  code: `LocalTtsEngine.synthesize()`/`_generateInIsolate()` is one
+  shared function parameterized only by `mmsCode`, identical for
+  Yoruba/Hausa/Pidgin, so testing with one downloaded model genuinely
+  does exercise the same path all three use. Real bug: the `compute()`
+  isolate call had no timeout at all, so any hang (model loading,
+  native inference, anything) surfaced as literally nothing happening,
+  forever, with no error. Added a 90s timeout. Honest, unresolved
+  caveat carried forward: this makes a hang *visible*, it does not
+  explain *why* generation would hang — that likely needs real device
+  instrumentation (e.g. `adb logcat` captured live during a hang) this
+  environment has no access to.
+- **English TTS: `SystemTtsTimeoutException` persists even with 3.24's
+  manifest `<queries>` fix confirmed present (batch7/8 build tag
+  visible in the error dialog).** Not yet root-caused further this
+  round — worth checking directly on the test device whether Android's
+  own Settings → Text-to-speech output actually has a working engine
+  configured with an en-US voice installed (testable independently of
+  this app via that settings screen's own "Play" test button) before
+  assuming another app-level fix is needed.
+- **"AI-generated voice" disclosure banner cluttering the reading
+  UI** — real UI complaint, fixed: was a full-width colored `Container`
+  sitting between the chapter header and verse text, visually competing
+  with the actual reading content every time audio played. Moved into
+  the same toolbar row as the Listen button, as a small plain caption
+  instead — same visibility condition (shown exactly while loading or
+  playing), just no longer pushing into the reading flow to do it.
+- **YouTube — likely traced to a missing/empty `YOUTUBE_API_KEY`
+  GitHub repo secret, not a code bug.** `release.yml` already has a
+  built-in check for exactly this (prints a `::warning::` in the
+  Actions log, and the build still "succeeds" with an empty key baked
+  in via `--dart-define`, which 401/403s at runtime — matching the
+  reported symptom exactly). Raised directly to the person to verify in
+  GitHub repo settings before assuming further code changes are needed;
+  no code changed this round for this specifically.
+
+Bumped `AppConfig.buildTag` to `'batch8-2026-08-25'`.
+
+---
+
 ## 4. Currently Open / Unresolved Issues (in priority order)
 
-0. **Read 3.27 before touching anything below.** Check the build tag
-   first (now `batch7-2026-08-25`), every time, before re-diagnosing
+0. **Read 3.28 before touching anything below.** Check the build tag
+   first (now `batch8-2026-08-25`), every time, before re-diagnosing
    TTS/Radio/YouTube.
-1. **TTS + Radio: `just_audio_background` removed entirely (3.27), not
-   yet confirmed on a device.** 3.22/3.24/3.25's targeted fixes for that
-   package all turned out to be correct-but-insufficient — the real fix
-   was dropping the dependency, not configuring it further. If
-   `LateInitializationError`/`_audioHandler` shows up again after this,
-   that would be genuinely surprising (the package is no longer in
-   pubspec.yaml at all) and worth a careful look at whether the
-   dependency truly got removed from the built APK, not a new theory
-   about the same package. TTS's synthesis-side fixes (3.22/3.24 —
-   `awaitSynthCompletion`, `initBindings`, the manifest `<queries>`
-   element) are unrelated to this and remain in place; if TTS still
-   fails after 3.27, check whether the failure is happening during
-   synthesis or during playback specifically (the Details text should
-   show which).
-2. **Known, accepted regression from 3.27**: no lock-screen/notification
+1. **`just_audio_background` removal (3.27) is CONFIRMED fixed** — no
+   `LateInitializationError` in six fresh screenshots after that batch,
+   including Radio actually playing and correctly persisting through a
+   screen lock. Do not revisit this as a theory; it's closed.
+2. **Radio's remaining bugs (spinner blocking taps, mislabeled "offline"
+   on a slow-but-working connection) — fixed in 3.28, not yet confirmed
+   on a device.**
+3. **Sherpa-onnx TTS ("keeps loading forever") — a 90s timeout added in
+   3.28 so a hang becomes a visible error, not yet confirmed on a
+   device, and NOT a full root-cause fix.** If it still hangs, this
+   will now surface as a timeout error after 90s rather than silence —
+   that's real progress, but *why* it hangs at all remains unexplained
+   and may need `adb logcat` output during a live hang to diagnose
+   further, which this environment can't capture itself.
+4. **English TTS `SystemTtsTimeoutException` persists despite 3.24's
+   manifest fix being confirmed present in the tested build.** Not
+   further root-caused as of 3.28 — next step is checking the device's
+   own Android Settings → Text-to-speech output configuration directly,
+   independent of this app, before assuming another app-level fix is
+   needed.
+5. **YouTube — likely a missing/empty `YOUTUBE_API_KEY` GitHub repo
+   secret (3.28), not a code bug.** Raised to the person to verify
+   directly in GitHub repo settings; get Details text for the actual
+   error if the secret turns out to already be set.
+6. **Known, accepted regression from 3.27**: no lock-screen/notification
    playback controls for Radio or TTS anymore. Was a real goal earlier
    in this project's history; deliberately traded away for reliability
    after `just_audio_background` proved unworkable across three
@@ -1066,37 +1142,42 @@ queries) were never in question and remain in place.
    integration if reliability is ever solid enough to justify the risk
    again — not a near-term priority given how much of this project's
    effort has already gone into this one dependency.
-3. **YouTube — actually working now**, per the person's own screenshot
-   (a live "Monday Bible Study" stream rendering correctly). No longer
-   in "broken" status; downgraded from prior open-issue entries.
-   Landscape rotation while viewing it was broken (separate UI bug, not
-   a YouTube API/sync issue) — fixed in 3.23.
-4. **Hardcoded/shared Groq API key fallback — explicitly requested,
+7. **"AI-generated voice" banner UI complaint — fixed in 3.28**, not yet
+   visually confirmed on a device.
+8. **Hardcoded/shared Groq API key fallback — explicitly requested,
    deliberately not implemented (3.22), still awaiting the person's
    explicit confirmation.** This reverses a real, prior security
    decision (`groq_service.dart`'s own doc comment: "no fallback, no
    shared quota," specifically to avoid an extractable key in a public
    APK). Only implement on their explicit confirmation they understand
    and accept that tradeoff.
-5. **`parseBibleReference()` only supports English book names** — bookmarks/
+9. **`parseBibleReference()` only supports English book names** — bookmarks/
    search results saved while reading in Yoruba/Hausa/Igbo/Pidgin will fail
    to parse when jumped back to. Known, not yet fixed.
-6. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
-   that definitely includes that commit — last status check was "not sure
-   if this build has the fix yet."
-7. **Per-verse TTS + synchronized highlight during audio playback** —
-   explicitly requested (the person wants the specific verse currently
-   being read aloud to highlight in real time, meaning TTS needs to
-   generate/play per-verse rather than as one whole-chapter blob) — **not
-   started at all.** Blocked on TTS actually working at all first (#1).
-8. **Translations needing native-speaker review** (functional, not
-   verified for naturalness/accuracy): the 5 companion accessibility
-   labels per non-English language, and the prayer fallback templates for
-   yo/ha/ig/pcm (3.8).
-9. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
-   reference screenshot's own "Tap or Drag" label, so treated as
-   acceptable, not a bug).
-10. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
+10. **Igbo/Yoruba locale crash fix (3.9) not yet re-confirmed** on a build
+    that definitely includes that commit — last status check was "not sure
+    if this build has the fix yet."
+11. **Per-verse TTS + synchronized highlight during audio playback** —
+    explicitly requested (the person wants the specific verse currently
+    being read aloud to highlight in real time, meaning TTS needs to
+    generate/play per-verse rather than as one whole-chapter blob) — **not
+    started at all.** Blocked on TTS actually working reliably first.
+12. **Premium animated splash screen — explicitly requested, spec
+    provided in full (see the person's own message), deliberately
+    deferred until this round's audio/TTS/YouTube fixes were done
+    first, per their own stated priority.** Native Android launch
+    screen (no white/black flash before Flutter starts) + an animated
+    "EKKLESIA" wordmark reveal (~1-1.5s, sequential letter reveal, no
+    spinning/bouncing/particles) + existing app UI as three explicitly
+    separate layers. Not started as of 3.28.
+13. **Translations needing native-speaker review** (functional, not
+    verified for naturalness/accuracy): the 5 companion accessibility
+    labels per non-English language, and the prayer fallback templates for
+    yo/ha/ig/pcm (3.8).
+14. Minor: no drag-and-drop in the Bible Quiz game, tap-only (matches the
+    reference screenshot's own "Tap or Drag" label, so treated as
+    acceptable, not a bug).
+15. Minor: `sermon_library_screen.dart` shows the same YouTube sync error
     as the Live screen but wasn't given a "Details" link in 3.21 (only
     Live screen was) — low priority since the same underlying error is
     already visible with Details on Live.

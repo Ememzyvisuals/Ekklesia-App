@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -109,7 +110,27 @@ class LocalTtsEngine {
           modelPath: info.localModelPath!,
           tokensPath: info.localTokensPath!,
           text: text,
-        ));
+        )).timeout(const Duration(seconds: 90), onTimeout: () {
+      // Real, confirmed bug: this had no timeout at all, so a hang here
+      // — model loading stuck, native inference stuck, anything — meant
+      // "keeps loading forever," exactly as reported, with no error
+      // ever surfacing at all (unlike the English/system engine path,
+      // which at least had a bound). 90s is generous for full-chapter
+      // synthesis on real, possibly low-end Android hardware, but
+      // bounded beats infinite.
+      //
+      // Important, honest caveat: this makes a hang visible as an
+      // error, it does not explain *why* generation would hang in the
+      // first place. That's a genuinely harder question this session
+      // can't fully answer — a stuck native FFI call inside sherpa-onnx
+      // wouldn't necessarily throw any Dart-visible exception at all,
+      // so root-causing it further would need real device
+      // instrumentation this environment doesn't have access to (e.g.
+      // `adb logcat` captured live during a hang, which could show a
+      // native crash/ANR/OOM this Dart-level timeout can never see).
+      throw TimeoutException(
+          'sherpa-onnx generation did not complete in time');
+    });
 
     await _writeWav(
       path: outPath,

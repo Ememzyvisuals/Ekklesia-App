@@ -71,11 +71,21 @@ class RadioService {
     // a fast, visible error instead of an infinite spinner; live_screen.dart
     // already has the friendly-message handling for a TimeoutException
     // here, it just never had one to catch.
+    //
+    // Bumped from 15s to 30s — confirmed on a real device with weak
+    // (1-2 bar) signal that the connection genuinely can take longer
+    // than 15s to fully establish while still eventually working fine
+    // (audio was heard playing normally even after the old 15s timeout
+    // had already fired and shown an incorrect "you're offline" error).
+    // 30s is a real tradeoff (a genuinely dead connection now takes
+    // twice as long to report as failed) accepted deliberately in
+    // favor of not misreporting a slow-but-working connection as
+    // broken.
     await _player
         .setAudioSource(AudioSource.uri(Uri.parse(url)))
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 30));
 
-    await _player.play().timeout(const Duration(seconds: 15));
+    await _player.play().timeout(const Duration(seconds: 30));
     _startNowPlayingPolling(languageKey);
   }
 

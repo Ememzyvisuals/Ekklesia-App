@@ -67,9 +67,26 @@ class _LiveScreenState extends State<LiveScreen> {
       // Was `_error = e.toString()` — same raw-exception-in-the-UI
       // problem as the AI Assistant screen; see that fix's comment for
       // why this matters on a real, often-offline device.
+      //
+      // Real, confirmed bug fixed here: a plain TimeoutException (this
+      // screen's own 30s bound in radio_service.dart on setAudioSource/
+      // play, not a network-level failure) was being lumped in with
+      // genuine connectivity failures and shown as "you're offline" —
+      // demonstrably wrong: the person reported hearing audio playing
+      // normally at the exact moment this message appeared, on a
+      // connection with visible (if weak) signal bars the whole time.
+      // A timeout means "took longer than expected," not "no
+      // connection" — on a slow connection those are different
+      // situations needing different messages, and the underlying
+      // native player can still be genuinely working despite the Dart
+      // await giving up waiting on it.
       final message = e.toString().toLowerCase();
-      if (message.contains('timeoutexception') ||
-          message.contains('socketexception') ||
+      if (message.contains('timeoutexception')) {
+        setState(() => _error =
+            'This is taking longer than usual to connect — it may still '
+            'start playing in a moment. Your connection looks weak rather '
+            "than offline.");
+      } else if (message.contains('socketexception') ||
           message.contains('failed host lookup') ||
           message.contains('network is unreachable')) {
         setState(() =>
@@ -377,8 +394,25 @@ class _LiveScreenState extends State<LiveScreen> {
                     // slightly on press, back to full size on release —
                     // not a bounce or spin, matching the "no over-animate"
                     // direction elsewhere in the app.
+                    //
+                    // Real, confirmed bug fixed here: `onTap` used to be
+                    // disabled for the entire time `buffering` was true,
+                    // not just while the initial connect (`_loading`) was
+                    // in progress. On a real, weak-signal connection, a
+                    // live Icecast-style stream can legitimately flicker
+                    // in and out of `ProcessingState.buffering` on its
+                    // own well after playback has genuinely started —
+                    // confirmed by the person hearing audio the whole
+                    // time the spinner kept showing. Disabling the whole
+                    // button for as long as that flickers left it stuck
+                    // and unresponsive even though tapping it would have
+                    // worked fine. Now only the initial connect attempt
+                    // (`_loading`) blocks tapping; ongoing buffering still
+                    // shows the spinner (that part is honest — the
+                    // stream really is buffering) but never blocks
+                    // interaction.
                     return _PremiumPlayButton(
-                      onTap: showSpinner ? null : _toggleRadio,
+                      onTap: _loading ? null : _toggleRadio,
                       isPlaying: _isPlaying,
                       showSpinner: showSpinner,
                     );

@@ -791,6 +791,48 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              // AI-narration disclosure — spec's explicit requirement
+              // that users always know this is AI-generated audio, not
+              // a human reading, and that it can make mistakes
+              // (mispronunciation, wrong emphasis). Real UI complaint
+              // fixed here: this used to be a full-width colored banner
+              // sitting between the chapter header and the verse text,
+              // visually competing with the actual reading content every
+              // time audio played. Moved into this same toolbar row as
+              // a small, plain caption next to the Listen button instead
+              // — still shown exactly when audio is loading or playing
+              // (same StreamBuilder condition as before), just not
+              // shouldering its way into the reading flow to do it.
+              if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
+                  EkklesiaLanguage.igbo)
+                Expanded(
+                  child: StreamBuilder<PlayerState>(
+                    stream: AudioService.instance.playerStateStream,
+                    builder: (context, snapshot) {
+                      final playing = snapshot.data?.playing ?? false;
+                      if (!_loadingAudio && !playing) {
+                        return const SizedBox.shrink();
+                      }
+                      return Row(
+                        children: [
+                          Icon(Icons.smart_toy_outlined,
+                              size: 13,
+                              color: AppTheme.textSecondary(context)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'AI-generated voice — may mispronounce words',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary(context)),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
                   EkklesiaLanguage.igbo)
                 IconButton(
@@ -851,45 +893,6 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
               ),
             ],
           ),
-        ),
-        // AI-narration disclosure — spec's explicit requirement that
-        // users always know this is AI-generated audio, not a human
-        // reading, and that it can make mistakes (mispronunciation,
-        // wrong emphasis). Shown only while there's actually audio
-        // loading or playing, not permanently, so it doesn't clutter the
-        // reading screen the rest of the time. StreamBuilder rather than
-        // a plain getter check — this widget isn't otherwise rebuilt
-        // when playback starts/stops on its own.
-        StreamBuilder<PlayerState>(
-          stream: AudioService.instance.playerStateStream,
-          builder: (context, snapshot) {
-            final playing = snapshot.data?.playing ?? false;
-            if (!_loadingAudio && !playing) {
-              return const SizedBox.shrink();
-            }
-            return Container(
-              width: double.infinity,
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.smart_toy_outlined, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'AI-generated voice. May mispronounce words or names.',
-                      style: TextStyle(
-                          fontSize: 12, color: AppTheme.textSecondary(context)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
         ),
         Expanded(
           child: ListView.builder(
