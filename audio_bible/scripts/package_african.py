@@ -35,7 +35,19 @@ from book_list import BOOKS, slug_for_book_name, release_tag, chapter_asset_name
 
 
 def gh(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True)
+    # See package_english.py's identical fix for why this matters — the
+    # same error-hiding bug existed here too.
+    try:
+        return subprocess.run(
+            ["gh", *args], check=True, capture_output=True, text=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"::error::gh {' '.join(args)} failed (exit {e.returncode})")
+        if e.stdout:
+            print(f"--- gh stdout ---\n{e.stdout}")
+        if e.stderr:
+            print(f"--- gh stderr ---\n{e.stderr}")
+        raise
 
 
 def ensure_release(tag: str, title: str) -> None:

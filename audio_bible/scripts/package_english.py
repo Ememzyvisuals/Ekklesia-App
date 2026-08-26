@@ -33,7 +33,25 @@ def download(url: str, dest: Path) -> None:
 
 
 def gh(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True)
+    # Real bug fixed here: capture_output=True was hiding gh's actual
+    # error message — check=True raised CalledProcessError on failure,
+    # but nothing ever printed e.stdout/e.stderr before that exception
+    # propagated, so a real, specific error from `gh` (bad auth, a
+    # naming conflict, a validation error, anything) showed up in the
+    # Actions log as nothing more than "returned non-zero exit status
+    # 1." Confirmed on a real run: exactly that happened on the very
+    # first-ever execution of this pipeline.
+    try:
+        return subprocess.run(
+            ["gh", *args], check=True, capture_output=True, text=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"::error::gh {' '.join(args)} failed (exit {e.returncode})")
+        if e.stdout:
+            print(f"--- gh stdout ---\n{e.stdout}")
+        if e.stderr:
+            print(f"--- gh stderr ---\n{e.stderr}")
+        raise
 
 
 def ensure_release(tag: str, title: str) -> None:

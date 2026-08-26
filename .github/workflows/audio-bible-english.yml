@@ -49,6 +49,15 @@ jobs:
   package:
     needs: determine-matrix
     runs-on: ubuntu-latest
+    # Required for `gh release create`/`gh release upload` to work —
+    # confirmed necessary by checking the existing release.yml in this
+    # same repo, which needs the identical permission for the same
+    # reason (this repo's default GITHUB_TOKEN permissions are
+    # apparently more restrictive than read/write-all). Missing this
+    # would make every release-creation call in package_english.py fail
+    # with a 403 partway through a run.
+    permissions:
+      contents: write
     strategy:
       # Modest concurrency, not "as many as possible" — this is
       # downloading/uploading real audio data, and being gentle with

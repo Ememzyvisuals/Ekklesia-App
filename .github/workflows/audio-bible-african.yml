@@ -37,6 +37,11 @@ jobs:
   package:
     needs: determine-matrix
     runs-on: ubuntu-latest
+    # See audio-bible-english.yml's identical comment on this same
+    # permissions block — required for gh release create/upload to
+    # succeed in this repo.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
