@@ -13,11 +13,11 @@ contains one folder per chapter named "{book_number}_{chapter_number}/"
 (no zero-padding), and each folder holds verse files named
 "KJV_{book_number}_{chapter_number}_{verse_number}.mp3".
 """
-import os
 import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -54,19 +54,34 @@ def gh(*args: str) -> subprocess.CompletedProcess:
         raise
 
 
-def ensure_release(tag: str, title: str) -> None:
-    """Creates the release if it doesn't already exist. Idempotent —
-    safe to re-run this whole script if a previous run failed partway.
+def ensure_release(tag: str, title: str) -> set[str]:
+    """Creates the release if it doesn't already exist, and returns the
+    set of asset filenames it already has (empty for a new release).
+
+    Real problem fixed here, found while chasing a rate-limit failure
+    on the African-language pipeline (see package_african.py's
+    identical fix for the full story): re-running after a partial
+    failure used to re-fetch and re-upload every chapter from scratch,
+    including ones already correctly published, wasting time and API
+    calls. English hasn't hit this in practice (it finished in one
+    run), but the exact same risk applies here, so the same fix is
+    applied for consistency and safety on any future partial re-run.
     """
     result = subprocess.run(
-        ["gh", "release", "view", tag], capture_output=True, text=True
+        ["gh", "release", "view", tag, "--json", "assets",
+         "-q", ".assets[].name"],
+        capture_output=True, text=True,
     )
     if result.returncode != 0:
         gh("release", "create", tag, "--title", title, "--notes",
            f"Chapter-by-chapter audio Bible assets ({title}).")
         print(f"Created release {tag}")
+        return set()
     else:
-        print(f"Release {tag} already exists — reusing it")
+        existing = set(line for line in result.stdout.splitlines() if line)
+        print(f"Release {tag} already exists — reusing it "
+              f"({len(existing)} assets already uploaded)")
+        return existing
 
 
 def upload_asset(tag: str, asset_path: Path) -> None:
@@ -75,6 +90,10 @@ def upload_asset(tag: str, asset_path: Path) -> None:
     regenerated.
     """
     gh("release", "upload", tag, str(asset_path), "--clobber")
+    # See package_african.py's identical throttle for why — real,
+    # confirmed evidence that hammering the release API across many
+    # hundreds of chapters can trip GitHub's rate limiting.
+    time.sleep(0.5)
 
 
 def main() -> None:
@@ -118,11 +137,17 @@ def main() -> None:
         sys.exit(1)
 
     tag = release_tag(LANG_CODE, book_number, slug)
-    ensure_release(tag, f"KJV English — {zip_stem.replace('_', ' ')}")
+    existing_assets = ensure_release(
+        tag, f"KJV English — {zip_stem.replace('_', ' ')}")
 
     for folder in chapter_folders:
         chapter_number = int(chapter_folder_re.match(folder.name).group(1))
         asset_name = chapter_asset_name(LANG_CODE, slug, chapter_number)
+
+        if asset_name in existing_assets:
+            print(f"Skipping {asset_name} — already uploaded")
+            continue
+
         chapter_zip_path = chapters_dir / asset_name
 
         mp3_files = sorted(folder.glob("*.mp3"))

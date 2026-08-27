@@ -24,9 +24,9 @@ especially the "unmapped book name" warnings this script prints for
 any book string book_list.py's slug_for_book_name() doesn't recognize.
 """
 import argparse
-import os
 import subprocess
 import sys
+import time
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -50,20 +50,50 @@ def gh(*args: str) -> subprocess.CompletedProcess:
         raise
 
 
-def ensure_release(tag: str, title: str) -> None:
+def ensure_release(tag: str, title: str) -> set[str]:
+    """Creates the release if it doesn't exist yet, and returns the set
+    of asset filenames it ALREADY has (empty set for a brand new
+    release).
+
+    Real, confirmed problem this fixes: the first version of this
+    function returned nothing, and the main loop below always
+    re-created every chapter zip and re-uploaded it regardless of
+    whether it was already there. Confirmed on a real run — hitting
+    GitHub's API rate limit (`HTTP 403: API rate limit exceeded`)
+    partway through a language, with hundreds of chapters already
+    successfully uploaded, meant a straightforward re-run would burn
+    through the SAME rate limit again re-uploading all that already-
+    correct work before ever reaching new ground — wasteful at best,
+    and likely to hit the same rate limit again even sooner. Returning
+    the existing asset list lets the main loop skip anything already
+    present.
+    """
     result = subprocess.run(
-        ["gh", "release", "view", tag], capture_output=True, text=True
+        ["gh", "release", "view", tag, "--json", "assets",
+         "-q", ".assets[].name"],
+        capture_output=True, text=True,
     )
     if result.returncode != 0:
         gh("release", "create", tag, "--title", title, "--notes",
            f"Chapter-by-chapter audio Bible assets ({title}).")
         print(f"Created release {tag}")
+        return set()
     else:
-        print(f"Release {tag} already exists — reusing it")
+        existing = set(line for line in result.stdout.splitlines() if line)
+        print(f"Release {tag} already exists — reusing it "
+              f"({len(existing)} assets already uploaded)")
+        return existing
 
 
 def upload_asset(tag: str, asset_path: Path) -> None:
     gh("release", "upload", tag, str(asset_path), "--clobber")
+    # A deliberate, small throttle — not required for correctness, but
+    # real evidence (see ensure_release's doc comment) that hammering
+    # the release API as fast as possible across many hundreds of
+    # chapters can trip GitHub's rate limiting. A person's whole Bible
+    # is not an emergency; trading some wall-clock time for staying
+    # comfortably under the limit is a good trade here.
+    time.sleep(0.5)
 
 
 def main() -> None:
@@ -182,16 +212,26 @@ def main() -> None:
     for slug in books_present:
         book_number = next(n for n, sl, _ in BOOKS if sl == slug)
         tag = release_tag(args.lang_code, book_number, slug)
-        ensure_release(tag, f"{args.config_name} — {slug} (audio Bible)")
+        existing_assets = ensure_release(
+            tag, f"{args.config_name} — {slug} (audio Bible)")
 
         chapters_for_book = sorted(
             {ch for (sl, ch) in groups if sl == slug}
         )
         for chapter_number in chapters_for_book:
+            asset_name = chapter_asset_name(args.lang_code, slug, chapter_number)
+
+            # Real fix, see ensure_release's doc comment — skip work
+            # entirely for a chapter that's already on the release from
+            # an earlier (possibly rate-limited/crashed) run, rather
+            # than re-fetching its audio and re-uploading it.
+            if asset_name in existing_assets:
+                print(f"Skipping {asset_name} — already uploaded")
+                continue
+
             entries = sorted(groups[(slug, chapter_number)], key=lambda e: e[1])
             row_indices = [i for i, _ in entries]
             verse_numbers = [v for _, v in entries]
-            asset_name = chapter_asset_name(args.lang_code, slug, chapter_number)
             chapter_zip_path = work_dir / asset_name
 
             # Only THIS chapter's rows (audio included) are fetched here

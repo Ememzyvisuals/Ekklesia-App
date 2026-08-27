@@ -43,6 +43,18 @@ jobs:
     permissions:
       contents: write
     strategy:
+      # Real, confirmed fix: with no max-parallel set, all 3 languages
+      # ran fully concurrently, all three hammering this SAME repo's
+      # shared GitHub API rate limit at once — confirmed as the root
+      # cause of `HTTP 403: API rate limit exceeded` and a separate
+      # "release not found" failure (a symptom of the same rate-limit
+      # condition, not an independent bug), both hit deep into real
+      # runs after hundreds of already-successful uploads. Running
+      # languages one at a time means the FULL rate-limit budget is
+      # available to whichever one is currently running, and combined
+      # with upload_asset()'s new deliberate throttle
+      # (package_african.py), should stay comfortably under the limit.
+      max-parallel: 1
       fail-fast: false
       matrix:
         config_name: ${{ fromJSON(needs.determine-matrix.outputs.languages) }}
