@@ -105,12 +105,39 @@ def main() -> None:
 
     print(f"Loaded {len(dataset)} rows total.")
 
-    # Group rows by (book_slug, chapter_number) so each group becomes
-    # one chapter zip, mirroring package_english.py's structure exactly.
-    groups: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    # Real, confirmed bug fixed here: the first version of this script
+    # iterated the WHOLE dataset up front, pulling every row's audio
+    # bytes into one big in-memory `groups` dict before writing a
+    # single zip. Confirmed on a real run — Yoruba and Igbo both loaded
+    # both splits successfully (visible in the Actions log, 100% on
+    # both progress bars), then the job died immediately after with no
+    # Python traceback at all — the classic signature of the OS
+    # OOM-killing the process outright (a real Python exception would
+    # have shown a traceback; an OS kill just stops everything, which
+    # GitHub Actions reports as "the operation was canceled").
+    # ~30,000 verses' worth of decoded audio held in memory
+    # simultaneously, on top of whatever the `datasets`/`pyarrow`
+    # library itself holds, is a very plausible way to exceed a
+    # standard GitHub-hosted runner's ~7GB RAM.
+    #
+    # Fixed with a genuine two-pass, low-memory design:
+    #   Pass 1 (cheap): iterate a version of the dataset with the
+    #     `audio` column REMOVED, to build the (book, chapter) -> list
+    #     of row-index groupings without ever touching audio bytes.
+    #   Pass 2: for each (book, chapter) group, fetch ONLY that
+    #     group's rows (typically 10-30 verses) via `dataset.select()`,
+    #     zip them, upload, and let Python garbage-collect that small
+    #     batch before moving to the next chapter. Peak memory is now
+    #     roughly "one chapter's worth of audio," not "the entire
+    #     language's audio," regardless of how many verses the whole
+    #     dataset has.
+    print("Pass 1/2: grouping verses by (book, chapter) — metadata only, "
+          "no audio touched yet...")
+    metadata_only = dataset.remove_columns(["audio"])
+    groups: dict[tuple[str, int], list[tuple[int, int]]] = defaultdict(list)
     unmapped_books: set[str] = set()
 
-    for row in dataset:
+    for row_index, row in enumerate(metadata_only):
         raw_book = row["book"]
         slug = slug_for_book_name(raw_book)
         if slug is None:
@@ -124,9 +151,10 @@ def main() -> None:
                   f"book={raw_book!r} chapter={row['chapter']!r} "
                   f"verse={row['verse']!r}")
             continue
-        groups[(slug, chapter_number)].append(
-            {"verse": verse_number, "audio": row["audio"]}
-        )
+        # Only the row index and verse number are kept here — no audio
+        # bytes at all yet, so this whole pass stays cheap regardless
+        # of dataset size.
+        groups[(slug, chapter_number)].append((row_index, verse_number))
 
     if unmapped_books:
         print(f"::warning::These book names from the dataset were not "
@@ -137,9 +165,12 @@ def main() -> None:
 
     print(f"Grouped into {len(groups)} (book, chapter) combinations "
           f"across {len({slug for slug, _ in groups})} books.")
+    del metadata_only  # done with this view; free it before pass 2
 
     work_dir = Path(f"/tmp/afribible_{args.lang_code}")
     work_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Pass 2/2: fetching audio and uploading, one chapter at a time...")
 
     # Process one BOOK at a time (not one release-per-run for everything)
     # so a failure partway through still leaves earlier books' releases
@@ -157,24 +188,31 @@ def main() -> None:
             {ch for (sl, ch) in groups if sl == slug}
         )
         for chapter_number in chapters_for_book:
-            verses = sorted(groups[(slug, chapter_number)], key=lambda v: v["verse"])
+            entries = sorted(groups[(slug, chapter_number)], key=lambda e: e[1])
+            row_indices = [i for i, _ in entries]
+            verse_numbers = [v for _, v in entries]
             asset_name = chapter_asset_name(args.lang_code, slug, chapter_number)
             chapter_zip_path = work_dir / asset_name
 
+            # Only THIS chapter's rows (audio included) are fetched here
+            # — `select()` is a targeted, efficient lookup against the
+            # Arrow-backed dataset, not a full-dataset load.
+            chapter_rows = dataset.select(row_indices)
+
             with zipfile.ZipFile(chapter_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for v in verses:
-                    audio = v["audio"]
-                    # `Audio(decode=False)` (see the dataset loading
-                    # call below via `.cast_column`) gives raw bytes
+                for row, verse_number in zip(chapter_rows, verse_numbers):
+                    # `Audio(decode=False)` (cast above) gives raw bytes
                     # directly — written out as-is, no re-encoding, so
                     # original quality/format (confirmed WAV) is
                     # preserved exactly.
-                    raw_bytes = audio["bytes"]
-                    verse_filename = f"{args.lang_code}_{slug}_{chapter_number}_{v['verse']}.wav"
+                    raw_bytes = row["audio"]["bytes"]
+                    verse_filename = f"{args.lang_code}_{slug}_{chapter_number}_{verse_number}.wav"
                     zf.writestr(verse_filename, raw_bytes)
 
+            del chapter_rows  # release this chapter's audio before the next
+
             upload_asset(tag, chapter_zip_path)
-            print(f"Uploaded {asset_name} ({len(verses)} verses)")
+            print(f"Uploaded {asset_name} ({len(entries)} verses)")
             chapter_zip_path.unlink()  # free disk space immediately
 
     print(f"Done: {args.config_name} ({args.lang_code}), "
