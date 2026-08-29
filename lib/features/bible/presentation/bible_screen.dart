@@ -3,45 +3,34 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart' show PlayerState;
 
 import '../../../core/config/app_theme.dart';
 import '../../../core/config/app_config.dart';
-import '../../../core/services/tts_service.dart';
-import '../../../core/services/local_tts_engine.dart'
-    show TtsModelNotReadyException;
-import '../../../core/services/system_tts_engine.dart'
-    show SystemTtsTimeoutException;
-import '../../../core/services/audio_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../bookmarks/presentation/bookmark_button.dart';
 import '../../bookmarks/domain/bookmark_item.dart';
 import '../../../core/database/app_database.dart';
-import '../data/bible_audio_cache.dart';
 import '../data/bible_providers.dart';
 import '../data/bible_repository.dart';
-import '../data/bible_tts_queue.dart';
-import 'voice_download_sheet.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
 import '../../../core/services/app_settings_service.dart';
 
 enum _View { books, chapters, verses }
 
-/// Offline Bible reader — reads from the local Isar database populated by
+/// Offline Bible reader — reads from the local database populated by
 /// [BibleImporter], not from any network API.
 ///
 /// Scope note (honest, as of this pass): book/chapter navigation, verse
 /// list, reference jump, offline substring search, bookmarking, verse
 /// highlights (colored), verse notes, "Continue Reading," reading streak,
-/// localization (en/yo/ha/ig/pcm), and chapter listen (via the existing
-/// TtsService/AudioService pipeline) are implemented. Generated chapter
-/// audio is cached to local disk (BibleAudioCache) keyed by chapter text,
-/// so replaying the same chapter plays instantly from disk instead of
-/// re-hitting the TTS Space — but generation itself is still "whole
-/// chapter up front," not the spec's chunked prefetch-while-playing
-/// streaming queue (BibleTTSQueue etc.) — see BIBLE_IMPORT_NOTES.md.
+/// and localization (en/yo/ha/ig/pcm) are implemented. Chapter listen was
+/// TTS-based (via TtsService/AudioService) and has been removed entirely
+/// — see pubspec.yaml's removal notes — in favor of downloading
+/// pre-recorded audio Bible chapters instead (audio_bible/ at the repo
+/// root has the packaging pipeline; wiring actual playback into this
+/// screen is a separate, not-yet-done pass).
 /// NOT yet implemented: dedicated background workers (BibleSyncWorker
-/// etc. — Bible audio cache reconciliation is folded into the existing
+/// etc. — general housekeeping is folded into the existing
 /// CleanupWorker instead, see its doc comment).
 class BibleScreen extends ConsumerStatefulWidget {
   const BibleScreen({super.key, this.initialReference, this.initialLanguage});
@@ -73,17 +62,12 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   List<BibleVerse> _searchResults = [];
   bool _searching = false;
   bool _loadingVerses = false;
-  bool _loadingAudio = false;
   String? _error;
-  // Holds the real, unfiltered exception text behind a friendly TTS
-  // error — set alongside `_error` only for the generic/unexpected
-  // failure paths below. `_error` stays the calm, friendly message
-  // shown by default; this is only surfaced if the person deliberately
-  // taps "Details," so it doesn't clutter the normal UI, but a real
-  // error is only one tap away instead of permanently invisible.
+  // Holds the real, unfiltered exception text behind a friendly error —
+  // set alongside `_error` for unexpected failure paths (Bible import,
+  // chapter loading, etc.) so a real error is one tap away via
+  // "Details" instead of permanently invisible.
   String? _errorDetail;
-  StreamSubscription<(int, int)?>? _queueProgressSub;
-  String? _queueProgressLabel;
   Map<int, Highlight> _highlights = {};
 
   // Verse-jump-and-blink support: one GlobalKey per rendered verse (so
@@ -258,152 +242,6 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     }
   }
 
-  Future<void> _listenToChapter() async {
-    if (_verses.isEmpty || _selectedBook == null || _selectedChapter == null) {
-      return;
-    }
-    final bibleLanguage = ref.read(bibleLanguageProvider);
-    final book = _selectedBook!;
-    final chapterNumber = _selectedChapter!;
-    final ekklesiaLanguage = _ekklesiaLanguageFor(bibleLanguage);
-    final fullText = _verses
-        .map((v) => v.content ?? '')
-        .where((t) => t.isNotEmpty)
-        .join(' ');
-    final contentHash = BibleAudioCache.hashFor(fullText);
-    final cache = ref.read(bibleAudioCacheProvider);
-
-    setState(() {
-      _loadingAudio = true;
-      _queueProgressLabel = null;
-      _error = null;
-      _errorDetail = null;
-    });
-    _queueProgressSub?.cancel();
-    _queueProgressSub =
-        AudioService.instance.queueProgressStream.listen((progress) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _queueProgressLabel =
-            progress == null ? null : 'Part ${progress.$1 + 1}/${progress.$2}';
-      });
-    });
-
-    try {
-      // Already generated and downloaded for this exact chapter text? Play
-      // straight from disk — no TTS Space call, no wait, no quota spent.
-      final cached =
-          await cache.get(bibleLanguage, book.code, chapterNumber, contentHash);
-      if (cached != null) {
-        final items = Stream.fromIterable(
-          cached.chunkPaths.map((p) => (
-                Uri.file(p).toString(),
-                cache.sourceFor(cached.audioSourceName)
-              )),
-        );
-        await AudioService.instance.playQueue(items);
-        return;
-      }
-
-      // Not cached (or the chapter's text changed since it was last
-      // cached) — generate with look-ahead prefetch (BibleTTSQueue) so
-      // chunk N+1 generates while chunk N plays instead of strictly one
-      // at a time, while also collecting every chunk so it can be saved
-      // to disk for next time once playback finishes.
-      final generated = <TtsResult>[];
-      Stream<(String, AudioSource)> instrumented() async* {
-        final chunks =
-            BibleTTSQueue().stream(text: fullText, language: ekklesiaLanguage);
-        await for (final result in chunks) {
-          generated.add(result);
-          yield (result.audioUrl, result.source);
-        }
-      }
-
-      await AudioService.instance.playQueue(instrumented());
-
-      if (generated.isNotEmpty) {
-        // Fire-and-forget: downloading to disk shouldn't hold up the UI
-        // now that listening has already finished. Failure here just
-        // means next time re-generates too — not a playback error.
-        // .then(...).catchError(...) rather than a bare .catchError on
-        // save()'s own Future — save() resolves to a
-        // BibleAudioCacheEntity, so its catchError handler would need to
-        // return one too; converting to Future<void> first with .then
-        // sidesteps that entirely and matches what this call site
-        // actually means ("run this, ignore the result either way").
-        unawaited(
-          cache
-              .save(
-                language: bibleLanguage,
-                bookCode: book.code,
-                chapter: chapterNumber,
-                contentHash: contentHash,
-                chunks: generated,
-              )
-              .then((_) {})
-              .catchError((_) {}),
-        );
-      }
-    } on TtsModelNotReadyException catch (e) {
-      // Not an error — the voice just isn't downloaded yet. Route to the
-      // download picker instead of showing a generic error message.
-      setState(() {
-        _error = null;
-        _errorDetail = null;
-      });
-      _promptModelDownload(e.mmsCode);
-    } on TtsLanguageUnavailableException {
-      setState(() {
-        _error = 'No offline voice is available for this language yet.';
-        _errorDetail = null;
-      });
-    } on SystemTtsTimeoutException {
-      // See system_tts_engine.dart's doc comment: confirmed on a real
-      // device that hitting Listen on the English Bible could hang
-      // forever with the old unguarded flutter_tts call. This is that
-      // same failure, now bounded and visible instead of an infinite
-      // spinner.
-      setState(() {
-        _error = "Your device's voice engine did not respond. Try again, or "
-            'check that a text-to-speech engine is installed and enabled '
-            "in your phone's settings.";
-        _errorDetail = null;
-      });
-    } on TtsGenerationException catch (e) {
-      setState(() {
-        _error = _friendlyTtsError(e);
-        // e.message already carries the real underlying exception text
-        // (tts_service.dart builds it as 'Could not generate audio: $e')
-        // — previously discarded entirely in favor of the generic
-        // message above, which made every real failure look identical
-        // and impossible to actually diagnose without device logs.
-        _errorDetail = e.message;
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Something went wrong generating audio. Try again.';
-        _errorDetail = e.toString();
-      });
-    } finally {
-      setState(() {
-        _loadingAudio = false;
-        _queueProgressLabel = null;
-      });
-    }
-  }
-
-  /// PROJECT_MIGRATION_AUDIT.md Phase 5: TTS is fully on-device now (or,
-  /// for Igbo, unavailable — see TtsLanguageUnavailableException). This
-  /// used to translate GradioErrorType (cloud service state: waking up,
-  /// rate-limited, etc.) — none of that applies anymore. What's left to
-  /// translate is genuine local synthesis failures.
-  String _friendlyTtsError(TtsGenerationException e) {
-    return 'Could not generate audio right now. Please try again.';
-  }
-
   /// Shows the real underlying exception text in a selectable dialog —
   /// so a real failure can actually be read and copied (to report back,
   /// paste into a message, etc.) instead of the friendly message above
@@ -426,35 +264,6 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _promptModelDownload(String mmsCode) async {
-    final download = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => VoiceDownloadSheet(mmsCode: mmsCode),
-    );
-    if (download == true && mounted) {
-      // Retry the same chapter's playback now that the model should be
-      // ready — the user just watched it finish downloading in the sheet.
-      _listenToChapter();
-    }
-  }
-
-  EkklesiaLanguage _ekklesiaLanguageFor(String bibleCode) {
-    switch (bibleCode) {
-      case 'yo':
-        return EkklesiaLanguage.yoruba;
-      case 'ha':
-        return EkklesiaLanguage.hausa;
-      case 'ig':
-        return EkklesiaLanguage.igbo;
-      case 'pcm':
-        return EkklesiaLanguage.pidgin;
-      case 'en':
-      default:
-        return EkklesiaLanguage.english;
-    }
   }
 
   Color _colorFromHex(String hex) => Color(int.parse(hex, radix: 16));
@@ -786,82 +595,12 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
         // below, matching how a real Bible app (see the reference
         // screenshots) keeps chrome quiet and lets the chapter number
         // itself be the visual anchor.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // AI-narration disclosure — spec's explicit requirement
-              // that users always know this is AI-generated audio, not
-              // a human reading, and that it can make mistakes
-              // (mispronunciation, wrong emphasis). Real UI complaint
-              // fixed here: this used to be a full-width colored banner
-              // sitting between the chapter header and the verse text,
-              // visually competing with the actual reading content every
-              // time audio played. Moved into this same toolbar row as
-              // a small, plain caption next to the Listen button instead
-              // — still shown exactly when audio is loading or playing
-              // (same StreamBuilder condition as before), just not
-              // shouldering its way into the reading flow to do it.
-              if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
-                  EkklesiaLanguage.igbo)
-                Expanded(
-                  child: StreamBuilder<PlayerState>(
-                    stream: AudioService.instance.playerStateStream,
-                    builder: (context, snapshot) {
-                      final playing = snapshot.data?.playing ?? false;
-                      if (!_loadingAudio && !playing) {
-                        return const SizedBox.shrink();
-                      }
-                      return Row(
-                        children: [
-                          Icon(Icons.smart_toy_outlined,
-                              size: 13,
-                              color: AppTheme.textSecondary(context)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              'AI-generated voice — may mispronounce words',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.textSecondary(context)),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              if (_ekklesiaLanguageFor(ref.watch(bibleLanguageProvider)) !=
-                  EkklesiaLanguage.igbo)
-                IconButton(
-                  onPressed: _loadingAudio ? null : _listenToChapter,
-                  tooltip: l10n.bibleListen,
-                  icon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 150),
-                    child: _loadingAudio
-                        ? const SizedBox(
-                            key: ValueKey('spinner'),
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.headphones_rounded,
-                            key: ValueKey('icon')),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (_loadingAudio && _queueProgressLabel != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(_queueProgressLabel!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 12, color: AppTheme.textSecondary(context))),
-          ),
+        // TTS-based "Listen" button, the AI-generated-voice disclosure
+        // caption, and the chunk-progress label all REMOVED along with
+        // TTS itself (see pubspec.yaml's removal notes). A new listen
+        // button, wired to pre-recorded audio Bible downloads instead of
+        // synthesis, is planned as a floating control (visible while
+        // reading, not blocking the verse text) — not yet built.
         // The big centered header — small caps book name, then a huge
         // chapter number as the actual visual anchor of the screen.
         // This is the single biggest change from the old plain-text

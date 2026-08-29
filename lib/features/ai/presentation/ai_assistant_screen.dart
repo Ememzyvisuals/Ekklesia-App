@@ -4,13 +4,9 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/services/groq_service.dart';
-import '../../../core/services/tts_service.dart';
-import '../../../core/services/audio_service.dart';
 import '../../../core/services/conversation_worker.dart';
-import '../../../core/services/download_worker.dart';
 import '../../../core/services/user_groq_key_service.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/config/app_theme.dart';
@@ -20,9 +16,11 @@ import '../domain/conversation.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
 import '../../../core/widgets/markdown_text.dart';
 
-/// AI Bible assistant — real Groq-backed chat, with a "Listen" action per
-/// assistant reply that routes to the correct TTS engine/persona via
-/// TtsService.
+/// AI Bible assistant — real Groq-backed chat. Previously had a "Listen"
+/// action per assistant reply (TtsService-backed) and a "Save offline"
+/// download action — both REMOVED along with TTS entirely (see
+/// pubspec.yaml's removal notes); AI replies are dynamically generated
+/// text with no pre-recorded audio to fall back to.
 ///
 /// Chat turns are persisted via ConversationWorker/ConversationRepository
 /// (see core/services/conversation_worker.dart) to `ai_conversations` —
@@ -266,111 +264,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     }
   }
 
-  int? _listeningIndex;
-  String? _queueProgressLabel;
-  StreamSubscription<(int, int)?>? _queueProgressSub;
-  final Set<int> _savedIndices = {};
-  int? _savingIndex;
-
-  /// Downloads a reply's TTS audio via DownloadWorker so it plays back
-  /// offline later from the Downloads screen. Multi-chunk replies (longer
-  /// than one on-device synthesis call comfortably handles at once — see
-  /// AppConfig.onDeviceTtsMaxChars) are saved as separate numbered parts
-  /// rather than merged into one file; merging audio client-side is out
-  /// of scope for this pass.
-  Future<void> _saveOffline(String text, int index) async {
-    setState(() => _savingIndex = index);
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final chunks = TtsService.instance.synthesizeChunks(
-        text: text,
-        language: EkklesiaLanguage.english,
-      );
-      final label = 'AI reply ${DateTime.now().millisecondsSinceEpoch}';
-      var part = 1;
-      var total = 0;
-      await for (final result in chunks) {
-        await DownloadWorker.instance.enqueue(
-          title: '$label (part $part)',
-          sourceUrl: result.audioUrl,
-          localPath: '${dir.path}/ekklesia_downloads/${label}_p$part.mp3',
-        );
-        part++;
-        total++;
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() => _savedIndices.add(index));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(total > 1
-                ? 'Saving $total parts to Downloads…'
-                : 'Saving to Downloads…')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save offline: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _savingIndex = null);
-      }
-    }
-  }
-
-  Future<void> _listenTo(String text, int index) async {
-    setState(() {
-      _listeningIndex = index;
-      _queueProgressLabel = null;
-      _error = null;
-      _errorDetail = null;
-    });
-    _queueProgressSub?.cancel();
-    _queueProgressSub =
-        AudioService.instance.queueProgressStream.listen((progress) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _queueProgressLabel =
-            progress == null ? null : 'Part ${progress.$1 + 1}/${progress.$2}';
-      });
-    });
-    try {
-      // AI replies can run long, so this splits into chunks
-      // (AppConfig.onDeviceTtsMaxChars) and plays them back-to-back
-      // rather than sending the whole reply to the on-device engine in
-      // one call — bounds how long a single synthesis call blocks and
-      // gives look-ahead prefetch a meaningful unit to work with.
-      final chunks = TtsService.instance.synthesizeChunks(
-        text: text,
-        language: EkklesiaLanguage.english,
-      );
-      await AudioService.instance.playQueue(
-        chunks.map((r) => (r.audioUrl, r.source)),
-      );
-    } catch (e) {
-      // Same raw-exception-in-the-UI bug already fixed on the main send
-      // path in this file, but missed here on the Listen/TTS path.
-      final message = e.toString().toLowerCase();
-      setState(() {
-        _error = message.contains('socketexception') ||
-                message.contains('failed host lookup')
-            ? "You're offline. Voice playback needs an internet connection."
-            : 'Could not play that message. Try again.';
-        _errorDetail = e.toString();
-      });
-    } finally {
-      setState(() {
-        _listeningIndex = null;
-        _queueProgressLabel = null;
-      });
-    }
-  }
+  // Listen / Save offline features REMOVED entirely along with TTS
+  // (see pubspec.yaml's removal notes) — _listenTo/_saveOffline and
+  // their state (_listeningIndex, _savingIndex, _savedIndices,
+  // _queueProgressLabel/_queueProgressSub) all used TtsService/
+  // AudioService, both deleted. AI replies are dynamically generated
+  // text with nothing pre-recorded to fall back to (unlike the Bible
+  // screen, which can use downloaded audio instead).
 
   @override
   void dispose() {
@@ -473,94 +373,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                                                   AppTheme.textPrimary(
                                                       context)),
                                         ),
-                                  if (!isUser) ...[
-                                    const SizedBox(height: 6),
-                                    Builder(builder: (context) {
-                                      final isPlaying =
-                                          _listeningIndex == index;
-                                      return InkWell(
-                                        onTap: isPlaying
-                                            ? null
-                                            : () =>
-                                                _listenTo(entry.text, index),
-                                        child: Row(
-                                          children: [
-                                            isPlaying
-                                                ? const SizedBox(
-                                                    height: 12,
-                                                    width: 12,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: AppColors.accent,
-                                                    ),
-                                                  )
-                                                : const Icon(
-                                                    CupertinoIcons
-                                                        .speaker_2_fill,
-                                                    size: 16,
-                                                    color: AppColors.accent),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              isPlaying
-                                                  ? (_queueProgressLabel ??
-                                                      'Loading...')
-                                                  : 'Listen',
-                                              style: const TextStyle(
-                                                  color: AppColors.accent,
-                                                  fontSize: 12),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                    const SizedBox(height: 4),
-                                    Builder(builder: (context) {
-                                      final isSaving = _savingIndex == index;
-                                      final isSaved =
-                                          _savedIndices.contains(index);
-                                      return InkWell(
-                                        onTap: (isSaving || isSaved)
-                                            ? null
-                                            : () =>
-                                                _saveOffline(entry.text, index),
-                                        child: Row(
-                                          children: [
-                                            isSaving
-                                                ? const SizedBox(
-                                                    height: 12,
-                                                    width: 12,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: AppColors.accent,
-                                                    ),
-                                                  )
-                                                : Icon(
-                                                    isSaved
-                                                        ? CupertinoIcons
-                                                            .checkmark_alt_circle_fill
-                                                        : CupertinoIcons
-                                                            .cloud_download,
-                                                    size: 16,
-                                                    color: AppColors.accent,
-                                                  ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              isSaved
-                                                  ? 'Saved offline'
-                                                  : (isSaving
-                                                      ? 'Saving...'
-                                                      : 'Save offline'),
-                                              style: const TextStyle(
-                                                  color: AppColors.accent,
-                                                  fontSize: 12),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                  ],
+                                  // Listen / Save offline buttons REMOVED
+                                  // — both were TTS-based (see
+                                  // pubspec.yaml's removal notes), and
+                                  // AI replies are dynamically generated
+                                  // text with nothing pre-recorded to
+                                  // fall back to, unlike the Bible
+                                  // screen.
                                 ],
                               ),
                             ),

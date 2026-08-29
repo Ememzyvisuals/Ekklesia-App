@@ -1,11 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar_community/isar.dart';
 
 import '../../../core/database/app_database.dart';
-import '../../../core/services/isar_service.dart';
 import '../../../core/services/app_settings_service.dart' show languageProvider;
 import 'bible_annotations_repository.dart';
-import 'bible_audio_cache.dart';
 import 'bible_importer.dart';
 import 'bible_repository.dart';
 
@@ -17,10 +14,13 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
   return AppDatabaseService.instance.database;
 });
 
-/// Isar is kept only for BibleAudioCacheEntity post-migration — see
-/// isar_service.dart's header comment for why. Everything else that used
-/// to read isarProvider now reads appDatabaseProvider instead.
-final isarProvider = Provider<Isar>((ref) => IsarService.instance.isar);
+// isarProvider / bibleAudioCacheProvider REMOVED — Isar existed in this
+// app ONLY for BibleAudioCacheEntity (TTS chunk cache metadata), and
+// both the entity and isar_service.dart itself are gone now that TTS
+// has been removed entirely (see pubspec.yaml's removal notes).
+// Everything that used to read isarProvider now reads
+// appDatabaseProvider instead — Drift is the only local database this
+// app uses.
 
 final bibleRepositoryProvider = Provider<BibleRepository>((ref) {
   return BibleRepository(ref.watch(appDatabaseProvider));
@@ -30,18 +30,14 @@ final bibleImporterProvider = Provider<BibleImporter>((ref) {
   return BibleImporter(ref.watch(appDatabaseProvider));
 });
 
-final bibleAudioCacheProvider = Provider<BibleAudioCache>((ref) {
-  return BibleAudioCache(ref.watch(isarProvider));
-});
-
 final bibleAnnotationsRepositoryProvider =
     Provider<BibleAnnotationsRepository>((ref) {
   return BibleAnnotationsRepository(ref.watch(appDatabaseProvider));
 });
 
 /// Bible dataset language codes ('en'/'yo'/'ha'/'ig'/'pcm') mapped from the
-/// app's internal language keys used elsewhere (LanguageNotifier,
-/// EkklesiaLanguage) — see AppConfig/app_settings_service.dart.
+/// app's internal language keys used elsewhere (LanguageNotifier) — see
+/// AppConfig/app_settings_service.dart.
 const Map<String, String> kAppLanguageToBibleCode = {
   'english': 'en',
   'yoruba': 'yo',

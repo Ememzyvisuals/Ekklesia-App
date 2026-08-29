@@ -17,7 +17,7 @@ class AppConfig {
   /// an old APK was still what got tested. Bump this string every time a
   /// new batch of fixes ships. Shown in Settings and appended to every
   /// "Error details" dialog across the app.
-  static const String buildTag = 'batch8-2026-08-25';
+  static const String buildTag = 'batch9-2026-08-25';
 
   // wazobiaVoiceSpaceUrl/yarnGptSpaceUrl removed (PROJECT_MIGRATION_AUDIT.md
   // Phase 5) — TTS is fully on-device now (sherpa_onnx + MMS models,
@@ -181,50 +181,11 @@ class AppConfig {
 
   // ---- Voice routing ----
   // wazobiaVoice*/yarnGpt* config removed (PROJECT_MIGRATION_AUDIT.md
-  // Phase 5) — TTS is fully on-device now, no cloud voice routing left.
-
-  // ---- On-device TTS (PROJECT_MIGRATION_AUDIT.md Phase 5) ----
-  //
-  // MMS ONNX models converted by Renpiper-mms-onnx-V1_build_and_publish.ipynb
-  // — see TTS_ARCHITECTURE.md for the full status. Coverage below is
-  // exactly what that notebook's own live checks confirmed, not assumed:
-  //
-  //   Yoruba (yor)  — confirmed converted
-  //   Hausa  (hau)  — confirmed converted
-  //   Pidgin (pcm)  — confirmed converted
-  //   Igbo   (ibo)  — no on-device voice available. Meta's MMS has no
-  //     Igbo checkpoint (confirmed via live HTTP checks, twice, every
-  //     plausible path/code) and every alternative source checked
-  //     (rnjema-unima, waxal-benchmarking, chimezie90/igbo-tts-f5,
-  //     multilingual-tts/VITS-OpenBible-Igbo) was ruled out or left
-  //     unfinished — see PROJECT_MIGRATION_AUDIT.md §4f for the full
-  //     record. By explicit instruction, Igbo does NOT fall back to a
-  //     cloud engine — this app has zero cloud dependency for speech.
-  //     TtsService throws TtsLanguageUnavailableException for Igbo;
-  //     bible_screen.dart hides the Listen control for it entirely.
-  //   English (eng) — not applicable; uses system TTS (spec §20), never
-  //     a downloaded model at all.
-  static const String mmsOnnxRepoBaseUrl =
-      'https://huggingface.co/Axiveri/Renpiper-mms-onnx-V1/resolve/main';
-
-  static const Set<String> mmsOnnxAvailableLanguages = {'yor', 'hau', 'pcm'};
-
-  /// Maps this app's EkklesiaLanguage codes (tts_service.dart) to the MMS
-  /// ISO 639-3 codes used in the published repo's folder names.
-  static const Map<String, String> ttsLanguageToMmsCode = {
-    'yoruba': 'yor',
-    'hausa': 'hau',
-    'pidgin': 'pcm',
-    // 'igbo' deliberately absent — no MMS model exists (see above).
-  };
-
-  /// Max characters per TTS chunk (tts_service.dart's chunkText) — bounds
-  /// how long a single on-device synthesis call runs, and gives
-  /// BibleTTSQueue's look-ahead prefetch a meaningful unit to work with.
-  /// VITS handles much longer input than the old cloud engines could
-  /// (no fixed-length truncation bug to work around), so this is sized
-  /// for UX/prefetch granularity, not a model input limit.
-  static const int onDeviceTtsMaxChars = 400;
+  // Phase 5) — TTS moved fully on-device, then TTS itself was removed
+  // from the app entirely (see pubspec.yaml's removal notes). No voice
+  // routing config of any kind is left — audio Bible content is now
+  // pre-recorded and downloaded (see audio_bible/ at the repo root),
+  // not synthesized.
 
   // ---- YouTube (DCLM sermon library / live programs) ----
   // Channel identity verified two independent ways: dclm.org's own

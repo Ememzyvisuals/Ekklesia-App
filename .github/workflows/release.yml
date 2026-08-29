@@ -106,52 +106,6 @@ jobs:
             fi
           fi
 
-      # Real, confirmed root cause of TTS silently hanging forever on
-      # both the Bible screen and AI Assistant "Listen" — never a Dart-
-      # level bug at all. Per Android's own developer documentation
-      # (developer.android.com/about/versions/11/behavior-changes-11):
-      # apps targeting Android 11+ that use text-to-speech MUST declare
-      # this exact <queries> element, or Android's package-visibility
-      # restrictions prevent the app from even seeing an installed TTS
-      # engine — TextToSpeech initialization then silently never
-      # completes, no error, no timeout of its own, just permanently
-      # stuck. This has nothing to do with flutter_tts's Dart API
-      # (awaitSynthCompletion, isFullPath, etc. — all still correct and
-      # necessary, just not sufficient on their own) and everything to
-      # do with the manifest `flutter create .` generates having no way
-      # to know this app uses TTS at all. Same "verify and patch a
-      # freshly generated file" pattern as the INTERNET permission step
-      # above.
-      - name: Ensure TTS package-visibility queries element is present
-        run: |
-          manifest="android/app/src/main/AndroidManifest.xml"
-          if grep -q 'android.intent.action.TTS_SERVICE' "$manifest"; then
-            echo "TTS queries element already present in $manifest."
-          else
-            echo "TTS queries element missing. Adding it now."
-            python3 - <<'PYEOF'
-          path = "android/app/src/main/AndroidManifest.xml"
-          with open(path) as f:
-              content = f.read()
-          queries_block = (
-              '    <queries>\n'
-              '        <intent>\n'
-              '            <action android:name="android.intent.action.TTS_SERVICE" />\n'
-              '        </intent>\n'
-              '    </queries>\n'
-          )
-          content = content.replace("<application", queries_block + "\n    <application", 1)
-          with open(path, "w") as f:
-              f.write(content)
-          PYEOF
-            if grep -q 'android.intent.action.TTS_SERVICE' "$manifest"; then
-              echo "TTS queries element added successfully."
-            else
-              echo "::error::Failed to add TTS queries element. Manifest structure may have changed."
-              exit 1
-            fi
-          fi
-
       # flutter_plugin_android_lifecycle (transitive, via file_picker —
       # and possibly others) now requires compileSdk 36+; `flutter create`
       # on this Flutter version still defaults lower, so

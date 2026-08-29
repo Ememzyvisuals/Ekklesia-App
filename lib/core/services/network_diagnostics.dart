@@ -193,8 +193,14 @@ class NetworkDiagnostics {
     );
     yield await _checkHttps('YouTube Data API (googleapis.com)',
         'https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${AppConfig.youtubeApiKey}');
-    yield await _checkHttps('TTS model host (huggingface.co)',
-        'https://huggingface.co/Axiveri/Renpiper-mms-onnx-V1/resolve/main');
+    // Was 'TTS model host (huggingface.co)' — removed along with TTS
+    // itself (see pubspec.yaml's removal notes). Replaced with a check
+    // against this repo's own GitHub Releases, which is where the app
+    // now downloads pre-recorded audio Bible chapters from — a more
+    // useful thing to verify reachability of now that it's an actual,
+    // regularly-used app dependency.
+    yield await _checkHttps('Audio Bible host (github.com releases)',
+        'https://github.com/Ememzyvisuals/Ekklesia-App/releases');
     yield await _checkStreamReachable(
         'DCLM radio stream host (airtime.dclm.org)',
         AppConfig.dclmStreams['english']!);

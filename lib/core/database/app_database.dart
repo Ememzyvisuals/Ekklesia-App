@@ -279,29 +279,6 @@ class QuizAttempts extends Table {
   DateTimeColumn get completedAt => dateTime()();
 }
 
-/// Tracks each on-device TTS language model's install state — spec §45's
-/// ModelRegistry, backed by Drift instead of an in-memory map so status
-/// survives app restarts (a half-downloaded model shouldn't look
-/// "ready" just because the process restarted mid-download).
-/// PROJECT_MIGRATION_AUDIT.md Phase 5. One row per language; see
-/// tts_model_registry.dart for the actual download/lifecycle logic —
-/// this table is just the persisted state.
-class TtsModelStatus extends Table {
-  TextColumn get language =>
-      text()(); // 'yor'|'hau'|'pcm' — MMS codes, see LocalTtsEngine
-  TextColumn get status =>
-      text().withDefault(const Constant('not_installed'))();
-  // 'not_installed'|'downloading'|'ready'|'error' — spec §45's exact list
-  TextColumn get localModelPath => text().nullable()();
-  TextColumn get localTokensPath => text().nullable()();
-  IntColumn get sampleRate => integer().nullable()();
-  TextColumn get errorMessage => text().nullable()();
-  DateTimeColumn get updatedAt => dateTime()();
-
-  @override
-  Set<Column> get primaryKey => {language};
-}
-
 class ReadingProgress extends Table {
   TextColumn get language => text()();
   TextColumn get bookCode => text()();
@@ -403,7 +380,6 @@ class UserAddedGames extends Table {
   NotificationSchedules,
   AiConversations,
   QuizAttempts,
-  TtsModelStatus,
   Messages,
   LocalGames,
   UserAddedGames,
@@ -413,7 +389,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -446,6 +422,21 @@ class AppDatabase extends _$AppDatabase {
           // additive-only guarantee, same self-healing fallback.
           if (from < 3 || !await _tableExists('user_added_games')) {
             await m.createTable(userAddedGames);
+          }
+          // v3 -> v4: TTS removed from the app entirely (see pubspec.yaml's
+          // removal notes) — drops `tts_model_status` (the Dart class is
+          // gone from the schema above, so this uses raw SQL rather than
+          // Drift's typed `deleteTable`, which needs a still-registered
+          // TableInfo to reference). `IF EXISTS` makes this safe
+          // regardless of whether a given install ever actually had the
+          // table — checked directly rather than gated on `from < 4`,
+          // since "drop it if it's there" is inherently safe to run on
+          // every upgrade, not just ones crossing this exact version
+          // boundary (matching the self-healing spirit of the checks
+          // above, without the confusion of an unnecessary `from` check
+          // on an action that doesn't need one).
+          if (await _tableExists('tts_model_status')) {
+            await customStatement('DROP TABLE IF EXISTS tts_model_status');
           }
         },
       );

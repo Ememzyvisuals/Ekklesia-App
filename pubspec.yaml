@@ -33,38 +33,37 @@ dependencies:
   timezone: ^0.9.4 # zonedSchedule requires this for scheduled local notifications
 
   # Local storage
-  # isar / isar_flutter_libs — being migrated OFF per PROJECT_MIGRATION_AUDIT.md
-  # Phase 1. Left in place until bible_repository.dart and the annotations
-  # repository are fully cut over to Drift (see app_database.dart) — removing
-  # them now would break the still-Isar-backed code paths mid-migration.
-  #
-  # Switched to isar_community / isar_community_generator (drop-in fork,
-  # same API under package:isar_community/isar.dart): upstream isar/
-  # isar_generator's last release permanently caps analyzer <6.0.0, which
-  # made it impossible to satisfy alongside drift_dev at any version —
-  # pinning drift_dev down to clear that cap just pushed the same
-  # analyzer/web-version conflict onto other packages (drift, then
-  # cached_network_image) instead of fixing it. isar_community_generator
-  # tracks a current analyzer range, so drift_dev/drift go back to normal
-  # unpinned ranges below.
-  isar_community: ^3.3.2
-  isar_community_flutter_libs: ^3.3.2
   drift: ^2.20.3
   sqlite3_flutter_libs: ^0.5.24
   path: ^1.9.0
   flutter_secure_storage: ^9.2.2 # Groq user key — see user_groq_key_service.dart migration note
   uuid: ^4.4.0 # LocalProfile id generation — see profile_repository.dart
 
-  # On-device TTS (PROJECT_MIGRATION_AUDIT.md Phase 5). sherpa_onnx wraps
-  # ONNX Runtime for mobile and loads the MMS VITS models converted by
-  # Renpiper-mms-onnx-V1_build_and_publish.ipynb — see
-  # TTS_ARCHITECTURE.md. Version not verified against pub.dev's current
-  # listing from this environment (no network access to pub.dev here) —
-  # check for the latest 1.x release before building.
-  sherpa_onnx: ^1.10.30
-  # English uses system TTS (spec §20), not a downloaded model.
-  flutter_tts: ^4.2.0
+  # isar_community / isar_community_flutter_libs REMOVED (previously used
+  # ONLY for BibleAudioCacheEntity, TTS cache metadata) — see main.dart's
+  # and cleanup_worker.dart's history for why. Removed as part of the
+  # decision to drop TTS entirely (see below) in favor of pre-recorded
+  # audio Bible downloads instead. Everything else was already fully
+  # migrated to Drift, so this genuinely was the last remaining reason
+  # Isar existed in this app at all.
+
   shared_preferences: ^2.2.3
+
+  # sherpa_onnx / flutter_tts REMOVED — TTS has been dropped from this
+  # app entirely, in favor of downloading pre-recorded audio Bible
+  # content instead (see audio_bible/ at the repo root for the
+  # packaging pipeline). This was a deliberate product decision, not a
+  # bug fix: after nine straight rounds of real, confirmed, individually
+  # fixed root causes across both engines (missing sherpa-onnx
+  # bindings init, missing flutter_tts completion-callback opt-ins,
+  # a missing Android 11+ manifest <queries> element, and finally a
+  # synthesizeToFile()-specific reliability gap requiring a speak()
+  # fallback) still left generation hanging or failing unpredictably on
+  # real devices, pre-recorded, professionally-produced audio is both
+  # more reliable and higher quality than on-device synthesis ever was
+  # going to be for this app's actual use case (reading Scripture aloud
+  # — not, e.g., a live conversational assistant, where synthesis is
+  # unavoidable).
 
   # Media
   just_audio: ^0.9.40
@@ -83,8 +82,8 @@ dependencies:
   # app-wide, whether that specific player asked for it or not. Removing
   # the dependency entirely — rather than trying to configure it
   # correctly a fourth time — eliminates the whole failure class. Real
-  # cost: no lock-screen/notification playback controls for Radio or
-  # TTS. Real benefit: plain `just_audio` alone needs no special native
+  # cost: no lock-screen/notification playback controls for Radio.
+  # Real benefit: plain `just_audio` alone needs no special native
   # Android setup at all, and every audio feature in this app was
   # broken without it working, so reliability wins here.
   youtube_player_flutter: ^9.0.3
@@ -131,13 +130,13 @@ dev_dependencies:
   build_runner: ^2.4.11
   # riverpod_generator/freezed/json_serializable removed — nothing
   # generates code from @riverpod/@freezed/@JsonSerializable in this
-  # codebase (see the runtime-package removal notes above). This also
-  # removes the isar_generator-vs-freezed version-pin workaround that
-  # used to live here — it only existed to accommodate a package that
-  # was never actually used.
-  isar_community_generator: ^3.3.2
-  # Back to a normal caret range — see the isar_community switch note in
-  # dependencies above for why this no longer needs pinning.
+  # codebase (see the runtime-package removal notes above).
+  #
+  # isar_community_generator REMOVED — it existed only to generate code
+  # for BibleAudioCacheEntity (Isar's schema builder), and that whole
+  # file is gone now that TTS (its only consumer) has been removed
+  # entirely — see the isar_community removal note in dependencies
+  # above.
   drift_dev: ^2.20.3
   # App icon + splash screen generation. Both only ever run inside
   # release.yml, right after that workflow's `flutter create .` step —

@@ -14,7 +14,6 @@ import '../../../core/config/app_theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../profile/data/profile_providers.dart';
 import '../../profile/data/profile_repository.dart';
-import '../../bible/presentation/voice_download_sheet.dart';
 
 /// Real settings screen — theme mode, language, voice engine info, sign
 /// out, downloads management, and notifications. Credits is still listed
@@ -30,17 +29,21 @@ final _localProfileStreamProvider = StreamProvider<LocalProfile?>((ref) {
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  // Voice descriptors updated for Phase 5 (on-device TTS) — previously
-  // named the cloud engines (WazobiaVoice/YarnGPT-local), both removed.
-  // Igbo explicitly marked as having no voice rather than silently
-  // implying one exists — see AppConfig.mmsOnnxRepoBaseUrl's doc comment
-  // for the full record of what was tried.
+  // TTS removed from the app entirely (see pubspec.yaml's removal
+  // notes) — these descriptors used to describe each language's voice
+  // engine ("device voice", "offline voice, download required", etc.),
+  // which no longer applies. Left as plain language names for now;
+  // should describe audio-Bible availability instead once the new
+  // pre-recorded-audio download system (audio_bible/ at the repo root)
+  // is wired into the Bible screen — English/Yoruba/Igbo/Hausa all have
+  // real published audio via that pipeline already, Pidgin does not
+  // (no open audio source was found for it).
   static const _languages = [
-    ('english', 'English (device voice)'),
-    ('hausa', 'Hausa (offline voice, download required)'),
-    ('igbo', 'Igbo (no voice available)'),
-    ('pidgin', 'Pidgin (offline voice, download required)'),
-    ('yoruba', 'Yoruba (offline voice, download required)'),
+    ('english', 'English'),
+    ('hausa', 'Hausa'),
+    ('igbo', 'Igbo'),
+    ('pidgin', 'Pidgin'),
+    ('yoruba', 'Yoruba'),
   ];
 
   @override
@@ -70,20 +73,6 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: Text(l10n.settingsGamesSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/games'),
-          ),
-          const Divider(),
-
-          ListTile(
-            leading: const Icon(Icons.record_voice_over_outlined),
-            title: const Text('Offline voices'),
-            subtitle: const Text(
-                'Download or remove on-device Bible narration voices'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              builder: (context) => const VoiceDownloadSheet(),
-            ),
           ),
           const Divider(),
 

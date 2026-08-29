@@ -13,7 +13,6 @@ import 'core/services/ai_config.dart';
 import 'core/services/conversation_worker.dart';
 import 'core/services/cleanup_worker.dart';
 import 'core/services/notification_service.dart';
-import 'core/services/isar_service.dart';
 import 'features/sermons/data/youtube_worker.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
@@ -56,29 +55,15 @@ Future<void> main() async {
   // chat), and the live radio stream — all opt-in / on-demand, never
   // required for the app to open or function.
 
-  // Opens the shared Isar database — as of PROJECT_MIGRATION_AUDIT.md
-  // Phase 1, this now holds ONLY BibleAudioCacheEntity (TTS cache
-  // metadata). Bible verses/books/chapters, bookmarks, highlights, notes,
-  // and reading progress/streak moved to Drift (core/database/
+  // Opened an Isar database here that held ONLY BibleAudioCacheEntity
+  // (TTS chunk cache metadata) — REMOVED entirely, along with
+  // isar_service.dart itself, now that TTS has been dropped from this
+  // app (see pubspec.yaml's removal notes for the full reasoning).
+  // Bible verses/books/chapters, bookmarks, highlights, notes, and
+  // reading progress/streak all live in Drift (core/database/
   // app_database.dart), which opens itself lazily the first time
-  // appDatabaseProvider is read — no explicit await needed here for it,
-  // unlike Isar. Requires build_runner to have generated
-  // bible_audio_cache_schema.g.dart and app_database.g.dart first (see
-  // BIBLE_IMPORT_NOTES.md).
-  //
-  // Timeout-guarded for the same reason as JustAudioBackground.init
-  // above: native library loading (isar_community_flutter_libs) hanging
-  // here — rather than throwing — would silently freeze startup with no
-  // way to diagnose it from the UI. Audio caching degrades (TTS
-  // re-generates instead of reading a cache) rather than the whole app
-  // becoming unusable.
-  try {
-    await IsarService.instance.open().timeout(const Duration(seconds: 8));
-  } catch (_) {
-    // Bible audio caching won't work this session, but nothing else in
-    // the app depends on Isar anymore (see comment above) — everything
-    // else is Drift-backed and opens independently.
-  }
+  // appDatabaseProvider is read — nothing left for this function to
+  // explicitly await opening at all.
 
   // Cache the onboarding-seen flag synchronously for the router's
   // redirect logic (which can't await inside GoRouter's redirect callback

@@ -3,36 +3,32 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../features/bible/data/bible_audio_cache.dart';
 import '../database/app_database.dart';
-import 'isar_service.dart';
-import 'tts_error_logger.dart';
 
 /// Periodic housekeeping: removes orphaned local files (partial/cancelled
-/// downloads, stale cached audio), prunes old local notification
-/// history, and trims the local TTS error log — everything this app
-/// stores now lives on-device, so every step here is a local file/DB
-/// operation, never a network call.
+/// downloads) and prunes old local notification history — everything
+/// this app stores now lives on-device, so every step here is a local
+/// file/DB operation, never a network call.
 ///
 /// PROJECT_MIGRATION_AUDIT.md Phase 4: notification history moved to
 /// Drift (Phase 4's notification_service.dart rewrite), so pruning it is
 /// a local DELETE now, not a Firestore batch. Firebase/Firestore has
-/// since been removed from the app entirely (see main.dart) — the
-/// `worker_logs` writes tts_error_logger.dart used to send to Firestore
-/// now go to a local rotating file, pruned here the same way `sync_logs`
-/// and `download_logs` pruning was removed once those collections went
-/// dead (`SyncWorker` deleted as dead code; `download_worker.dart` moved
-/// its completion event to a local notification).
+/// since been removed from the app entirely (see main.dart).
+///
+/// TTS error log pruning and the Bible-audio-cache reconciliation step
+/// (`_pruneOrphanedBibleAudio`) were REMOVED along with TTS itself (see
+/// pubspec.yaml's removal notes) — `tts_error_logger.dart` and
+/// `bible_audio_cache.dart` are both gone, and there's no longer any
+/// TTS-generated cache to reconcile.
 ///
 /// This does NOT touch a user's completed Downloads (see DownloadWorker) —
-/// only files explicitly marked temp/orphaned, and log/notification data
+/// only files explicitly marked temp/orphaned, and notification data
 /// that's operational, not user content.
 class CleanupWorker {
   CleanupWorker._internal();
   static final CleanupWorker instance = CleanupWorker._internal();
 
   static const _maxNotificationAge = Duration(days: 30);
-  static const _maxLogAge = Duration(days: 14);
   static const _maxTempFileAge = Duration(days: 3);
 
   /// Runs one full pass. Safe to call repeatedly (e.g. once per app
@@ -46,9 +42,7 @@ class CleanupWorker {
   Future<void> runOnce({String? uid}) async {
     await Future.wait([
       _pruneOldNotifications(),
-      TtsErrorLogger.instance.pruneOlderThan(_maxLogAge),
       _pruneOrphanedTempFiles(),
-      _pruneOrphanedBibleAudio(),
     ]);
   }
 
@@ -61,18 +55,6 @@ class CleanupWorker {
           .go();
     } catch (_) {
       // Best-effort housekeeping — never surface this to the user.
-    }
-  }
-
-  /// Reconciles the Bible chapter-audio cache (see BibleAudioCache) —
-  /// covers the spec's "BibleCleanupWorker" responsibility without a
-  /// separate timer/class, since it's just one more step in the
-  /// housekeeping pass this worker already runs.
-  Future<void> _pruneOrphanedBibleAudio() async {
-    try {
-      await BibleAudioCache(IsarService.instance.isar).pruneOrphaned();
-    } catch (_) {
-      // Isar not open yet, or a file-system hiccup — next cycle retries.
     }
   }
 
