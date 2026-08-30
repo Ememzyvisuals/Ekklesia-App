@@ -274,7 +274,6 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   @override
   void dispose() {
-    _queueProgressSub?.cancel();
     _inputController.dispose();
     super.dispose();
   }

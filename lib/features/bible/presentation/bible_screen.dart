@@ -14,6 +14,7 @@ import '../../../core/database/app_database.dart';
 import '../data/bible_providers.dart';
 import '../data/bible_repository.dart';
 import '../data/audio_bible_service.dart';
+import '../data/audio_bible_book_slugs.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
 import '../../../core/services/app_settings_service.dart';
 

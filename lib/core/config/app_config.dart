@@ -17,7 +17,7 @@ class AppConfig {
   /// an old APK was still what got tested. Bump this string every time a
   /// new batch of fixes ships. Shown in Settings and appended to every
   /// "Error details" dialog across the app.
-  static const String buildTag = 'batch10-2026-08-28';
+  static const String buildTag = 'batch11-2026-08-30';
 
   // wazobiaVoiceSpaceUrl/yarnGptSpaceUrl removed (PROJECT_MIGRATION_AUDIT.md
   // Phase 5) — TTS is fully on-device now (sherpa_onnx + MMS models,
