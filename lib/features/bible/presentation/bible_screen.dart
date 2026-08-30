@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart' show PlayerState, ProcessingState;
 
 import '../../../core/config/app_theme.dart';
 import '../../../core/config/app_config.dart';
@@ -12,6 +13,7 @@ import '../../bookmarks/domain/bookmark_item.dart';
 import '../../../core/database/app_database.dart';
 import '../data/bible_providers.dart';
 import '../data/bible_repository.dart';
+import '../data/audio_bible_service.dart';
 import '../../../core/widgets/ekklesia_companion.dart';
 import '../../../core/services/app_settings_service.dart';
 
@@ -58,9 +60,9 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   int? _selectedChapter;
   List<BibleVerse> _verses = [];
   final _referenceController = TextEditingController();
-  final _searchController = TextEditingController();
-  List<BibleVerse> _searchResults = [];
-  bool _searching = false;
+  // _searchController/_searchResults/_searching REMOVED — search now
+  // lives entirely inside _BibleSearchSheet (its own local state),
+  // reached via the app bar's search icon (_openSearchSheet).
   bool _loadingVerses = false;
   String? _error;
   // Holds the real, unfiltered exception text behind a friendly error —
@@ -69,6 +71,17 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   // "Details" instead of permanently invisible.
   String? _errorDetail;
   Map<int, Highlight> _highlights = {};
+
+  // Audio Bible playback state (pre-recorded downloads — replaces TTS
+  // entirely, see pubspec.yaml's removal notes). Tracked per-screen
+  // rather than read live from AudioBibleService everywhere, since a
+  // few different widgets (floating button, bottom sheet) need to
+  // rebuild together on the same state changes.
+  bool _audioDownloading = false;
+  bool _audioPlaying = false;
+  AudioBibleDownloadProgress? _audioDownloadProgress;
+  StreamSubscription<PlayerState>? _audioStateSub;
+  StreamSubscription<AudioBibleDownloadProgress?>? _audioProgressSub;
 
   // Verse-jump-and-blink support: one GlobalKey per rendered verse (so
   // Scrollable.ensureVisible can find it), which verse is currently
@@ -90,6 +103,52 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   static const _transitionDuration = Duration(milliseconds: 260);
 
   String get _bibleLanguage => ref.read(bibleLanguageProvider);
+
+  /// Toggles audio Bible playback for the CURRENTLY VIEWED chapter —
+  /// downloads it first if needed. If something is already playing
+  /// (this chapter or otherwise), toggles pause/resume on that instead
+  /// of starting a second, overlapping playback — there's only ever one
+  /// "now playing" audio, matching a normal player's behavior.
+  Future<void> _toggleAudioPlayback() async {
+    if (_audioPlaying) {
+      await AudioBibleService.instance.pause();
+      return;
+    }
+
+    final playerState = AudioBibleService.instance.player.processingState;
+    final hasPausedAudio = playerState != ProcessingState.idle &&
+        playerState != ProcessingState.completed;
+    if (hasPausedAudio) {
+      // Paused mid-chapter — resume the same audio rather than
+      // re-downloading/restarting from verse 1.
+      await AudioBibleService.instance.resume();
+      return;
+    }
+
+    final book = _selectedBook;
+    final chapter = _selectedChapter;
+    if (book == null || chapter == null) return;
+
+    setState(() {
+      _error = null;
+      _errorDetail = null;
+    });
+
+    try {
+      await AudioBibleService.instance
+          .playChapter(_bibleLanguage, book.position, chapter);
+    } on AudioBibleUnavailableException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not play this chapter\'s audio. Try again.';
+        _errorDetail = e.toString();
+      });
+    }
+  }
+
 
   Future<void> _openChapter(BibleBook book, int chapterNumber) async {
     setState(() {
@@ -227,20 +286,8 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     });
   }
 
-  Future<void> _runSearch(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-    setState(() => _searching = true);
-    try {
-      final repo = ref.read(bibleRepositoryProvider);
-      final results = await repo.search(_bibleLanguage, query);
-      setState(() => _searchResults = results);
-    } finally {
-      setState(() => _searching = false);
-    }
-  }
+  // _runSearch REMOVED — search logic now lives inside _BibleSearchSheet
+  // (its own local state), not on this screen.
 
   /// Shows the real underlying exception text in a selectable dialog —
   /// so a real failure can actually be read and copied (to report back,
@@ -282,6 +329,22 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   @override
   void initState() {
     super.initState();
+    // Reflects AudioBibleService's actual player/download state into
+    // this screen's own state so the floating button and bottom sheet
+    // (built below) rebuild live — the service itself is a singleton
+    // shared across the whole app, not owned by this screen.
+    _audioStateSub = AudioBibleService.instance.stateStream.listen((state) {
+      if (!mounted) return;
+      setState(() => _audioPlaying = state.playing);
+    });
+    _audioProgressSub =
+        AudioBibleService.instance.downloadProgressStream.listen((progress) {
+      if (!mounted) return;
+      setState(() {
+        _audioDownloadProgress = progress;
+        _audioDownloading = progress != null;
+      });
+    });
     if (widget.initialLanguage != null) {
       // Set once here, before the first frame — bibleLanguageProvider is
       // a StateProvider, safe to write in initState via ref.read (not
@@ -304,10 +367,10 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
 
   @override
   void dispose() {
-    _queueProgressSub?.cancel();
+    _audioStateSub?.cancel();
+    _audioProgressSub?.cancel();
     _blinkTimer?.cancel();
     _referenceController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -343,6 +406,19 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
             icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold)),
             tooltip: 'Text size',
             onPressed: () => _showFontSizeSheet(context),
+          ),
+          // Search — was two always-visible text fields (a reference
+          // jump box and a live-search box) sitting permanently at the
+          // top of the reading screen, explicitly reported as making
+          // the Bible itself "not visible enough." Collapsed into one
+          // icon that opens a full search overlay on demand instead,
+          // matching the reference screenshots (a plain magnifying-
+          // glass icon that reveals a dedicated search screen, rather
+          // than reserving space for search at all times).
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: l10n.bibleSearchHint,
+            onPressed: () => _openSearchSheet(bibleLanguage),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -402,57 +478,9 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
   }
 
   Widget _buildReader(String bibleLanguage, {Key? key}) {
-    final l10n = AppLocalizations.of(context);
     return Column(
       key: key,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _referenceController,
-                  decoration: InputDecoration(
-                    hintText: l10n.bibleReferenceLabel,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _jumpToReference(),
-                ),
-              ),
-              IconButton(
-                  icon: const Icon(Icons.search_rounded),
-                  onPressed: _jumpToReference),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: l10n.bibleSearchHint,
-              border: const OutlineInputBorder(),
-              isDense: true,
-              suffixIcon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
-                child: _searching
-                    ? const Padding(
-                        key: ValueKey('spinner'),
-                        padding: EdgeInsets.all(10),
-                        child: SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : const SizedBox.shrink(key: ValueKey('empty')),
-              ),
-            ),
-            onChanged: _runSearch,
-          ),
-        ),
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
           child: _error != null
@@ -481,38 +509,45 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                 )
               : const SizedBox(width: double.infinity),
         ),
-        if (_searchController.text.isNotEmpty)
-          Expanded(child: _buildSearchResults(bibleLanguage))
-        else
-          Expanded(child: _buildNavigation(bibleLanguage)),
+        Expanded(child: _buildNavigation(bibleLanguage)),
       ],
     );
   }
 
-  Widget _buildSearchResults(String bibleLanguage) {
-    final l10n = AppLocalizations.of(context);
-    if (_searchResults.isEmpty) {
-      return Center(child: Text(l10n.bibleNoMatches));
-    }
-    return ListView.builder(
-      itemCount: _searchResults.length,
-      itemBuilder: (context, i) {
-        final v = _searchResults[i];
-        return ListTile(
-          title: Text('${v.bookCode} ${v.chapter}:${v.number}'),
-          subtitle: Text(v.content ?? '',
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: () async {
-            final repo = ref.read(bibleRepositoryProvider);
-            final books = await repo.getBooks(bibleLanguage);
-            final book = books.firstWhere((b) => b.code == v.bookCode);
-            _searchController.clear();
-            await _openChapter(book, v.chapter);
-          },
-        );
-      },
+  /// Opens the search overlay — was two always-visible text fields
+  /// permanently occupying the top of the reading screen; explicitly
+  /// reported as making the Bible itself "not visible enough."
+  /// Collapsed into this on-demand sheet instead, matching the
+  /// reference screenshots (a search icon reveals a dedicated search
+  /// screen with quick suggestions, rather than reserving space for
+  /// search at all times). Selecting a suggestion or a result closes
+  /// the sheet and jumps straight to that passage — no more results
+  /// staying open inline atop the reading view.
+  void _openSearchSheet(String bibleLanguage) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _BibleSearchSheet(
+        bibleLanguage: bibleLanguage,
+        onJumpToReference: (reference) {
+          Navigator.of(sheetContext).pop();
+          _referenceController.text = reference;
+          _jumpToReference();
+        },
+        onSelectVerse: (verse) async {
+          Navigator.of(sheetContext).pop();
+          final repo = ref.read(bibleRepositoryProvider);
+          final books = await repo.getBooks(bibleLanguage);
+          final book = books.firstWhere((b) => b.code == verse.bookCode);
+          await _openChapter(book, verse.chapter);
+        },
+      ),
     );
   }
+
+  // _buildSearchResults REMOVED — search now happens entirely within
+  // the _BibleSearchSheet overlay (see _openSearchSheet above), not
+  // inline within the main reading view.
 
   Future<void> _continueReading(String bookCode, int chapter) async {
     final repo = ref.read(bibleRepositoryProvider);
@@ -586,165 +621,198 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
     final chapter = _selectedChapter!;
     final hasNextChapter = chapter < book.chapterCount;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        // Compact utility row — search/settings-style icon buttons
-        // instead of the old header eating a full text-label row; the
-        // book/chapter identity now lives in the big centered header
-        // below, matching how a real Bible app (see the reference
-        // screenshots) keeps chrome quiet and lets the chapter number
-        // itself be the visual anchor.
-        // TTS-based "Listen" button, the AI-generated-voice disclosure
-        // caption, and the chunk-progress label all REMOVED along with
-        // TTS itself (see pubspec.yaml's removal notes). A new listen
-        // button, wired to pre-recorded audio Bible downloads instead of
-        // synthesis, is planned as a floating control (visible while
-        // reading, not blocking the verse text) — not yet built.
-        // The big centered header — small caps book name, then a huge
-        // chapter number as the actual visual anchor of the screen.
-        // This is the single biggest change from the old plain-text
-        // layout: a Bible reading screen should feel like a real book
-        // you're opening to a specific page, not a scrolling text log.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-          child: Column(
-            children: [
-              Text(
-                book.name.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 2.2,
-                  color: AppTheme.textSecondary(context),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$chapter',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 64,
-                  fontWeight: FontWeight.w700,
-                  height: 1.0,
-                  color: AppTheme.textPrimary(context),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-            // +1 for the "next chapter" pill at the end — a real Bible
-            // app lets you keep reading forward without backing out to
-            // the chapter grid every time (see the reference
-            // screenshots' bottom "Job 32" pill).
-            itemCount: _verses.length + 1,
-            itemBuilder: (context, i) {
-              if (i == _verses.length) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Center(
-                    child: hasNextChapter
-                        ? OutlinedButton.icon(
-                            onPressed: () => _openChapter(book, chapter + 1),
-                            icon: const Icon(Icons.arrow_forward_rounded,
-                                size: 18),
-                            label: Text('${book.name} ${chapter + 1}'),
-                          )
-                        : Text(
-                            "That's the end of ${book.name}.",
-                            style: TextStyle(
-                                color: AppTheme.textSecondary(context)),
-                          ),
-                  ),
-                );
-              }
-              final v = _verses[i];
-              if (v.omitted) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Text(
-                    '${v.number}. [${l10n.bibleNotIncluded}]',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Compact utility row — search/settings-style icon buttons
+            // instead of the old header eating a full text-label row; the
+            // book/chapter identity now lives in the big centered header
+            // below, matching how a real Bible app (see the reference
+            // screenshots) keeps chrome quiet and lets the chapter number
+            // itself be the visual anchor.
+            // The big centered header — small caps book name, then a huge
+            // chapter number as the actual visual anchor of the screen.
+            // This is the single biggest change from the old plain-text
+            // layout: a Bible reading screen should feel like a real book
+            // you're opening to a specific page, not a scrolling text log.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+              child: Column(
+                children: [
+                  Text(
+                    book.name.toUpperCase(),
                     style: TextStyle(
-                        color: AppTheme.textSecondary(context),
-                        fontStyle: FontStyle.italic),
-                  ),
-                );
-              }
-              final isBlinking = _blinkVerseNumber == v.number && _blinkVisible;
-              final highlightColor = isBlinking
-                  ? AppColors.accent.withValues(alpha: 0.55)
-                  : _highlights[v.number] != null
-                      ? _colorFromHex(_highlights[v.number]!.colorHex)
-                          .withValues(alpha: 0.35)
-                      : Colors.transparent;
-              final verseKey =
-                  _verseKeys.putIfAbsent(v.number, () => GlobalKey());
-              return InkWell(
-                key: verseKey,
-                onLongPress: () => _showVerseActions(v),
-                borderRadius: BorderRadius.circular(6),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: double.infinity,
-                  color: highlightColor,
-                  padding: const EdgeInsets.symmetric(vertical: 7),
-                  child: RichText(
-                    // RichText, unlike Text, does NOT automatically pick
-                    // up ambient text scaling from MediaQuery — it needs
-                    // textScaler passed explicitly. Without this line,
-                    // the font-size preference wired into MaterialApp's
-                    // builder in main.dart would silently have no effect
-                    // here specifically, which would have been a real
-                    // problem given the Bible reader is the actual,
-                    // named reason that setting exists.
-                    textScaler: MediaQuery.textScalerOf(context),
-                    text: TextSpan(
-                      // Serves the same "elegant reading" role as a
-                      // reference Bible app's serif body text — Outfit
-                      // is this app's one bundled font (see
-                      // app_theme.dart), used here at a larger size and
-                      // taller line-height than the rest of the UI
-                      // specifically for long-form reading comfort,
-                      // rather than introducing a second typeface.
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 17,
-                        height: 1.65,
-                        color: AppTheme.textPrimary(context),
-                      ),
-                      children: [
-                        // Small, raised-by-size-contrast verse number —
-                        // reads as a superscript against the much larger
-                        // body text beside it, the same visual trick a
-                        // printed Bible uses, without needing manual
-                        // baseline offset hacks.
-                        TextSpan(
-                          text: '${v.number} ',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textSecondary(context),
-                          ),
-                        ),
-                        TextSpan(text: v.content ?? ''),
-                        if (v.approximate)
-                          TextSpan(
-                            text: '  (${l10n.bibleApproxNumbering})',
-                            style: const TextStyle(
-                                fontSize: 11, fontStyle: FontStyle.italic),
-                          ),
-                      ],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 2.2,
+                      color: AppTheme.textSecondary(context),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$chapter',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 64,
+                      fontWeight: FontWeight.w700,
+                      height: 1.0,
+                      color: AppTheme.textPrimary(context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                // +1 for the "next chapter" pill at the end — a real Bible
+                // app lets you keep reading forward without backing out to
+                // the chapter grid every time (see the reference
+                // screenshots' bottom "Job 32" pill).
+                itemCount: _verses.length + 1,
+                itemBuilder: (context, i) {
+                  if (i == _verses.length) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: hasNextChapter
+                            ? OutlinedButton.icon(
+                                onPressed: () =>
+                                    _openChapter(book, chapter + 1),
+                                icon: const Icon(Icons.arrow_forward_rounded,
+                                    size: 18),
+                                label: Text('${book.name} ${chapter + 1}'),
+                              )
+                            : Text(
+                                "That's the end of ${book.name}.",
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary(context)),
+                              ),
+                      ),
+                    );
+                  }
+                  final v = _verses[i];
+                  if (v.omitted) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        '${v.number}. [${l10n.bibleNotIncluded}]',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary(context),
+                            fontStyle: FontStyle.italic),
+                      ),
+                    );
+                  }
+                  final isBlinking =
+                      _blinkVerseNumber == v.number && _blinkVisible;
+                  final highlightColor = isBlinking
+                      ? AppColors.accent.withValues(alpha: 0.55)
+                      : _highlights[v.number] != null
+                          ? _colorFromHex(_highlights[v.number]!.colorHex)
+                              .withValues(alpha: 0.35)
+                          : Colors.transparent;
+                  final verseKey =
+                      _verseKeys.putIfAbsent(v.number, () => GlobalKey());
+                  return InkWell(
+                    key: verseKey,
+                    onLongPress: () => _showVerseActions(v),
+                    borderRadius: BorderRadius.circular(6),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: double.infinity,
+                      color: highlightColor,
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      child: RichText(
+                        // RichText, unlike Text, does NOT automatically pick
+                        // up ambient text scaling from MediaQuery — it needs
+                        // textScaler passed explicitly. Without this line,
+                        // the font-size preference wired into MaterialApp's
+                        // builder in main.dart would silently have no effect
+                        // here specifically, which would have been a real
+                        // problem given the Bible reader is the actual,
+                        // named reason that setting exists.
+                        textScaler: MediaQuery.textScalerOf(context),
+                        text: TextSpan(
+                          // Serves the same "elegant reading" role as a
+                          // reference Bible app's serif body text — Outfit
+                          // is this app's one bundled font (see
+                          // app_theme.dart), used here at a larger size and
+                          // taller line-height than the rest of the UI
+                          // specifically for long-form reading comfort,
+                          // rather than introducing a second typeface.
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 17,
+                            height: 1.65,
+                            color: AppTheme.textPrimary(context),
+                          ),
+                          children: [
+                            // Small, raised-by-size-contrast verse number —
+                            // reads as a superscript against the much larger
+                            // body text beside it, the same visual trick a
+                            // printed Bible uses, without needing manual
+                            // baseline offset hacks.
+                            TextSpan(
+                              text: '${v.number} ',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textSecondary(context),
+                              ),
+                            ),
+                            TextSpan(text: v.content ?? ''),
+                            if (v.approximate)
+                              TextSpan(
+                                text: '  (${l10n.bibleApproxNumbering})',
+                                style: const TextStyle(
+                                    fontSize: 11, fontStyle: FontStyle.italic),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
+        // Floating audio-Bible control — replaces the old inline "Listen"
+        // button (TTS-based, removed entirely, see pubspec.yaml's removal
+        // notes). Floating rather than blocking, per the explicit request:
+        // a person can keep reading the verse text underneath while
+        // audio plays, matching the reference screenshots' small
+        // circular control docked to the side of the screen rather than
+        // a modal player.
+        if (kAudioBibleAvailableLanguages.contains(_bibleLanguage))
+          Positioned(
+            right: 16,
+            bottom: 24,
+            child: _AudioBibleFloatingButton(
+              playing: _audioPlaying,
+              downloading: _audioDownloading,
+              downloadProgress: _audioDownloadProgress,
+              onTap: _toggleAudioPlayback,
+              onLongPress: () => _openAudioPlayerSheet(book, chapter),
+            ),
+          ),
       ],
+    );
+  }
+
+  void _openAudioPlayerSheet(BibleBook book, int chapter) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _AudioBiblePlayerSheet(
+        bookName: book.name,
+        chapterNumber: chapter,
+        onTogglePlayback: _toggleAudioPlayback,
+        playing: _audioPlaying,
+      ),
     );
   }
 
@@ -1206,6 +1274,439 @@ class _AutoImportingViewState extends ConsumerState<_AutoImportingView> {
           SizedBox(height: 16),
           Text('Setting up your Bible'),
         ],
+      ),
+    );
+  }
+}
+
+/// Small floating circular control docked to the side of the reading
+/// screen — tap to play/pause, long-press for the full player sheet
+/// (scrubber, speed, rewind/fast-forward). Deliberately not a modal or
+/// full-width bar: the explicit request was to be able to keep reading
+/// the verse text underneath while audio plays, matching the reference
+/// screenshots' small side-docked control rather than a blocking player.
+class _AudioBibleFloatingButton extends StatelessWidget {
+  const _AudioBibleFloatingButton({
+    required this.playing,
+    required this.downloading,
+    required this.downloadProgress,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final bool playing;
+  final bool downloading;
+  final AudioBibleDownloadProgress? downloadProgress;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    double? progressValue;
+    if (downloading &&
+        downloadProgress?.total != null &&
+        downloadProgress!.total! > 0) {
+      progressValue = downloadProgress!.received / downloadProgress!.total!;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: downloading ? null : onTap,
+        onLongPress: downloading ? null : onLongPress,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.accent,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (downloading)
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    value: progressValue, // null = indeterminate
+                    color: Colors.white,
+                    backgroundColor: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+              Icon(
+                downloading
+                    ? Icons.download_rounded
+                    : (playing
+                        ? Icons.pause_rounded
+                        : Icons.headphones_rounded),
+                color: Colors.white,
+                size: 26,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full audio-Bible player — reached via long-press on the floating
+/// button. Matches the reference screenshot's layout: book title,
+/// rewind/play/fast-forward row, a scrubber with elapsed/total time, and
+/// a speed control. No separate "download" button here (unlike the
+/// reference) — downloading already happens automatically the first
+/// time playback starts, so there's nothing extra for the person to
+/// trigger manually.
+class _AudioBiblePlayerSheet extends StatelessWidget {
+  const _AudioBiblePlayerSheet({
+    required this.bookName,
+    required this.chapterNumber,
+    required this.onTogglePlayback,
+    required this.playing,
+  });
+
+  final String bookName;
+  final int chapterNumber;
+  final VoidCallback onTogglePlayback;
+  final bool playing;
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: BoxDecoration(
+          color: AppTheme.surface(context),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textSecondary(context).withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              bookName,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary(context)),
+            ),
+            Text(
+              'Chapter $chapterNumber',
+              style: TextStyle(
+                  fontSize: 13, color: AppTheme.textSecondary(context)),
+            ),
+            const SizedBox(height: 24),
+            StreamBuilder<Duration>(
+              stream: AudioBibleService.instance.positionStream,
+              builder: (context, snapshot) {
+                final position = snapshot.data ?? Duration.zero;
+                final total =
+                    AudioBibleService.instance.duration ?? Duration.zero;
+                final totalMs = total.inMilliseconds;
+                final sliderValue = totalMs > 0
+                    ? (position.inMilliseconds / totalMs).clamp(0.0, 1.0)
+                    : 0.0;
+                return Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6),
+                      ),
+                      child: Slider(
+                        value: sliderValue,
+                        activeColor: AppColors.accent,
+                        onChanged: totalMs > 0
+                            ? (v) => AudioBibleService.instance.player
+                                .seek(total * v)
+                            : null,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_formatDuration(position),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary(context))),
+                          Text(_formatDuration(total),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary(context))),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  iconSize: 32,
+                  icon: const Icon(Icons.replay_10_rounded),
+                  color: AppTheme.textPrimary(context),
+                  onPressed: () {
+                    final current = AudioBibleService.instance.player.position;
+                    AudioBibleService.instance.player
+                        .seek(current - const Duration(seconds: 10));
+                  },
+                ),
+                const SizedBox(width: 16),
+                StreamBuilder<PlayerState>(
+                  stream: AudioBibleService.instance.stateStream,
+                  builder: (context, snapshot) {
+                    final isPlaying = snapshot.data?.playing ?? playing;
+                    return Material(
+                      color: AppColors.accent,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: onTogglePlayback,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Icon(
+                            isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 16),
+                IconButton(
+                  iconSize: 32,
+                  icon: const Icon(Icons.forward_10_rounded),
+                  color: AppTheme.textPrimary(context),
+                  onPressed: () {
+                    final current = AudioBibleService.instance.player.position;
+                    AudioBibleService.instance.player
+                        .seek(current + const Duration(seconds: 10));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            StreamBuilder<double>(
+              stream: AudioBibleService.instance.player.speedStream,
+              builder: (context, snapshot) {
+                final speed = snapshot.data ?? 1.0;
+                return TextButton(
+                  onPressed: () {
+                    // Cycles 1x -> 1.25x -> 1.5x -> 2x -> back to 1x —
+                    // simple, no separate menu needed for 4 options.
+                    const speeds = [1.0, 1.25, 1.5, 2.0];
+                    final currentIndex = speeds.indexOf(speed);
+                    final next =
+                        speeds[(currentIndex + 1) % speeds.length];
+                    AudioBibleService.instance.player.setSpeed(next);
+                  },
+                  child: Text(
+                    '${speed == speed.roundToDouble() ? speed.toInt() : speed}x',
+                    style: TextStyle(color: AppTheme.textPrimary(context)),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// On-demand search overlay — see _openSearchSheet's doc comment for
+/// why this exists as a separate sheet rather than inline fields.
+/// Manages its own local search state (not the parent screen's) since a
+/// modal route doesn't rebuild automatically when a parent's setState
+/// runs; matches the reference screenshot's layout — a search bar, and
+/// a handful of quick "Suggested" shortcuts before anything is typed.
+class _BibleSearchSheet extends ConsumerStatefulWidget {
+  const _BibleSearchSheet({
+    required this.bibleLanguage,
+    required this.onJumpToReference,
+    required this.onSelectVerse,
+  });
+
+  final String bibleLanguage;
+  final ValueChanged<String> onJumpToReference;
+  final ValueChanged<BibleVerse> onSelectVerse;
+
+  @override
+  ConsumerState<_BibleSearchSheet> createState() => _BibleSearchSheetState();
+}
+
+class _BibleSearchSheetState extends ConsumerState<_BibleSearchSheet> {
+  final _controller = TextEditingController();
+  List<BibleVerse> _results = [];
+  bool _searching = false;
+
+  // Matches the reference screenshot's exact suggestions — well-known,
+  // frequently-looked-up passages someone new to the app is likely to
+  // want, not a personalized or dynamically-computed list.
+  static const _suggestions = [
+    'Psalm 1',
+    'Proverbs',
+    'Genesis',
+    'Psalm 23',
+    'Isaiah',
+  ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _results = []);
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final repo = ref.read(bibleRepositoryProvider);
+      final results = await repo.search(widget.bibleLanguage, query);
+      if (mounted) setState(() => _results = results);
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SafeArea(
+      child: Padding(
+        // Lifts the sheet above the on-screen keyboard so the search
+        // field and results stay visible while typing.
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          autofocus: true,
+                          decoration: InputDecoration(
+                            hintText: l10n.bibleSearchHint,
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: _controller.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () {
+                                      _controller.clear();
+                                      setState(() => _results = []);
+                                    },
+                                  ),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24)),
+                            isDense: true,
+                          ),
+                          onChanged: _runSearch,
+                          onSubmitted: widget.onJumpToReference,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: _controller.text.trim().isEmpty
+                        ? ListView(
+                            controller: scrollController,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 8),
+                                child: Text('Suggested',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color:
+                                            AppTheme.textSecondary(context))),
+                              ),
+                              for (final s in _suggestions)
+                                ListTile(
+                                  title: Text(s,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                  trailing: const Icon(
+                                      Icons.chevron_right_rounded),
+                                  onTap: () => widget.onJumpToReference(s),
+                                ),
+                            ],
+                          )
+                        : _searching
+                            ? const Center(
+                                child: CircularProgressIndicator())
+                            : _results.isEmpty
+                                ? Center(child: Text(l10n.bibleNoMatches))
+                                : ListView.builder(
+                                    controller: scrollController,
+                                    itemCount: _results.length,
+                                    itemBuilder: (context, i) {
+                                      final v = _results[i];
+                                      return ListTile(
+                                        title: Text(
+                                            '${v.bookCode} ${v.chapter}:${v.number}'),
+                                        subtitle: Text(v.content ?? '',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis),
+                                        onTap: () =>
+                                            widget.onSelectVerse(v),
+                                      );
+                                    },
+                                  ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
